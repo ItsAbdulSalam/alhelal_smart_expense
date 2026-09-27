@@ -1,0 +1,56 @@
+name: alhelal_smart_expense
+description: "A new Flutter project."
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  supabase_flutter: ^2.17.2
+  google_generative_ai: ^0.4.7
+  flutter_bloc: ^9.1.1
+  image_picker: ^1.2.3
+  intl:
+  http: ^1.6.0
+  fl_chart: ^1.2.0
+  csv: ^8.0.0
+  universal_html: ^2.3.0
+  pdf: ^3.13.1
+  printing: ^5.15.1
+  flutter_dotenv: ^6.0.1
+  hive_flutter: ^1.1.0
+  hive: ^2.2.3
+  connectivity_plus: ^7.3.1
+  share_plus: ^13.3.0
+  flutter_localizations:
+    sdk: flutter
+  flutter_gen: ^5.15.0
+  shared_preferences: ^2.5.5
+  path_provider: ^2.1.6
+  web: ^1.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  image_path: "assets/icon/GTP_icon.png"
+  android: true
+  ios: true
+
+flutter:
+  uses-material-design: true
+  generate: true # <--- تمت إضافة هذا السطر هنا بنجاح لتفعيل الترجمة
+
+  assets:
+    - .env
+    - assets/icon/
