@@ -9,7 +9,7 @@ import '../../data/models/expense_model.dart';
 import '../../data/repositories/expense_repository.dart';
 import 'add_expense_screen.dart';
 import 'auth_screen.dart';
-import '../../main.dart';
+import '../../core/utils/locale_controller.dart';
 import '../../l10n/app_localizations.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -974,7 +974,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
-            onSelected: (loc) => MyApp.setLocale(context, loc),
+            onSelected: (loc) => LocaleController.setLocale(loc),
             itemBuilder: (context) {
               final currentLocale = Localizations.localeOf(
                 context,

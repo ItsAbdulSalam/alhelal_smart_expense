@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:ui' as ui;
 import '../../l10n/app_localizations.dart';
-import '../../main.dart'; // لتفعيل تغيير اللغة
 import 'dashboard_screen.dart';
+import '../../core/utils/locale_controller.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -218,7 +218,7 @@ class _AuthScreenState extends State<AuthScreen> {
     );
 
     if (selectedLocale != null && mounted) {
-      MyApp.setLocale(context, selectedLocale);
+      LocaleController.setLocale(selectedLocale);
     }
   }
 
