@@ -1,9 +1,11 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:ui' as ui;
-import '../../l10n/app_localizations.dart';
-import 'dashboard_screen.dart';
+
 import '../../core/utils/locale_controller.dart';
+import '../../l10n/app_localizations.dart';
+import 'dashboard_loader.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -33,6 +35,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   void _showNotification(String message, {bool isError = true}) {
     if (!mounted) return;
+
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -77,6 +80,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
     final loc = AppLocalizations.of(context)!;
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+
     setState(() => _isLoading = true);
 
     try {
@@ -96,16 +100,17 @@ class _AuthScreenState extends State<AuthScreen> {
                 : 'Account created successfully! Logging in...',
             isError: false,
           );
-          if (mounted) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const DashboardScreen()),
-                );
-              }
-            });
-          }
+
+          if (!mounted) return;
+
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const DashboardLoader()),
+            );
+          });
         }
       } else {
         final res = await Supabase.instance.client.auth.signInWithPassword(
@@ -113,19 +118,22 @@ class _AuthScreenState extends State<AuthScreen> {
           password: password,
         );
 
-        if (res.user != null && mounted) {
+        if (res.user != null) {
+          if (!mounted) return;
+
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const DashboardScreen()),
-              );
-            }
+            if (!mounted) return;
+
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const DashboardLoader()),
+            );
           });
         }
       }
     } on AuthException catch (e) {
       String msg = e.message;
+
       if (msg.contains('Invalid login credentials')) {
         msg = loc.invalidCredentials;
       } else if (msg.contains('User already registered')) {
@@ -137,6 +145,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ? 'كلمة المرور يجب ألا تقل عن 6 خانات'
             : 'Password must be at least 6 characters';
       }
+
       _showNotification(msg, isError: true);
     } catch (_) {
       _showNotification(
@@ -146,13 +155,19 @@ class _AuthScreenState extends State<AuthScreen> {
         isError: true,
       );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  // 🌟 دالة فتح القائمة المنسدلة بشكل مضمون ومستقر تماماً في الويب والموبايل
+  // ===============================================================
+  // Language Menu
+  // ===============================================================
+
   void _showLanguageMenu(BuildContext context) async {
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
+
     final size = renderBox.size;
     final position = renderBox.localToGlobal(Offset.zero);
 
@@ -222,6 +237,10 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  // ===============================================================
+  // Build
+  // ===============================================================
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
@@ -253,6 +272,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ),
             ),
+
             Positioned(
               bottom: -150,
               right: isArabic ? null : -100,
@@ -272,7 +292,6 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
             ),
 
-            // المحتوى القابل للتمرير بالكامل مع زر اللغة في الأعلى
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
@@ -287,7 +306,6 @@ class _AuthScreenState extends State<AuthScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // 🌟 زر تغيير اللغة أصبح جزءاً مرناً وآناً للنقر ولا يختفي بشكل خاطئ
                         Align(
                           alignment: isArabic
                               ? Alignment.topLeft
@@ -336,9 +354,9 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                           ),
                         ),
+
                         const SizedBox(height: 16),
 
-                        // الشاشات المتجاوبة (ديسكتوب أو موبايل)
                         isDesktop
                             ? Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -368,6 +386,10 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  // ===============================================================
+  // Branding Hero
+  // ===============================================================
+
   Widget _buildBrandingHero(bool isArabic) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,7 +408,9 @@ class _AuthScreenState extends State<AuthScreen> {
             color: Color(0xFF818CF8),
           ),
         ),
+
         const SizedBox(height: 24),
+
         const Text(
           'Alhelal Smart Expense',
           style: TextStyle(
@@ -396,7 +420,9 @@ class _AuthScreenState extends State<AuthScreen> {
             letterSpacing: -0.5,
           ),
         ),
+
         const SizedBox(height: 12),
+
         SizedBox(
           width: double.infinity,
           child: Text(
@@ -411,7 +437,9 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           ),
         ),
+
         const SizedBox(height: 36),
+
         _buildFeatureItem(
           Icons.auto_awesome_rounded,
           isArabic
@@ -423,7 +451,9 @@ class _AuthScreenState extends State<AuthScreen> {
           const Color(0xFF818CF8),
           isArabic,
         ),
+
         const SizedBox(height: 18),
+
         _buildFeatureItem(
           Icons.pie_chart_outline_rounded,
           isArabic
@@ -435,7 +465,9 @@ class _AuthScreenState extends State<AuthScreen> {
           const Color(0xFF34D399),
           isArabic,
         ),
+
         const SizedBox(height: 18),
+
         _buildFeatureItem(
           Icons.shield_outlined,
           isArabic
@@ -506,6 +538,10 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  // ===============================================================
+  // Mobile Header
+  // ===============================================================
+
   Widget _buildMobileHeader(bool isArabic) {
     return Column(
       children: [
@@ -542,6 +578,10 @@ class _AuthScreenState extends State<AuthScreen> {
       ],
     );
   }
+
+  // ===============================================================
+  // Authentication Card
+  // ===============================================================
 
   Widget _buildAuthCard(bool isArabic) {
     final loc = AppLocalizations.of(context)!;
@@ -584,6 +624,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           setState(() {
                             _isSignUp = false;
                           });
+
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             _formKey.currentState?.reset();
                           });
@@ -600,6 +641,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           setState(() {
                             _isSignUp = true;
                           });
+
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             _formKey.currentState?.reset();
                           });
@@ -610,7 +652,9 @@ class _AuthScreenState extends State<AuthScreen> {
                 ],
               ),
             ),
+
             const SizedBox(height: 28),
+
             Text(
               _isSignUp
                   ? (isArabic ? 'إنشاء حساب جديد' : 'Create New Account')
@@ -621,7 +665,9 @@ class _AuthScreenState extends State<AuthScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
+
             const SizedBox(height: 6),
+
             Text(
               _isSignUp
                   ? (isArabic
@@ -630,7 +676,9 @@ class _AuthScreenState extends State<AuthScreen> {
                   : loc.enterDetails,
               style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
             ),
+
             const SizedBox(height: 24),
+
             _buildInputField(
               controller: _emailController,
               label: loc.email,
@@ -643,18 +691,23 @@ class _AuthScreenState extends State<AuthScreen> {
                 if (value == null || value.trim().isEmpty) {
                   return loc.emailRequired;
                 }
+
                 final emailRegex = RegExp(
                   r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
                 );
+
                 if (!emailRegex.hasMatch(value.trim())) {
                   return isArabic
                       ? 'يرجى إدخال صيغة بريد إلكتروني صحيحة'
                       : 'Please enter a valid email format';
                 }
+
                 return null;
               },
             ),
+
             const SizedBox(height: 18),
+
             _buildInputField(
               controller: _passwordController,
               label: loc.password,
@@ -666,7 +719,9 @@ class _AuthScreenState extends State<AuthScreen> {
                 if (_isSignUp) {
                   FocusScope.of(context).nextFocus();
                 } else {
-                  if (!_isLoading) _submit();
+                  if (!_isLoading) {
+                    _submit();
+                  }
                 }
               },
               suffixIcon: IconButton(
@@ -677,23 +732,30 @@ class _AuthScreenState extends State<AuthScreen> {
                   color: Colors.grey.shade400,
                   size: 20,
                 ),
-                onPressed: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
                   return loc.passwordRequired;
                 }
+
                 if (value.trim().length < 6) {
                   return isArabic
                       ? 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام'
                       : 'Password must be at least 6 characters';
                 }
+
                 return null;
               },
             ),
+
             if (_isSignUp) ...[
               const SizedBox(height: 18),
+
               _buildInputField(
                 controller: _confirmPasswordController,
                 label: isArabic ? 'تأكيد كلمة المرور' : 'Confirm Password',
@@ -702,7 +764,9 @@ class _AuthScreenState extends State<AuthScreen> {
                 obscureText: _obscureConfirmPassword,
                 textDirection: ui.TextDirection.ltr,
                 onFieldSubmitted: (_) {
-                  if (!_isLoading) _submit();
+                  if (!_isLoading) {
+                    _submit();
+                  }
                 },
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -712,9 +776,11 @@ class _AuthScreenState extends State<AuthScreen> {
                     color: Colors.grey.shade400,
                     size: 20,
                   ),
-                  onPressed: () => setState(
-                    () => _obscureConfirmPassword = !_obscureConfirmPassword,
-                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscureConfirmPassword = !_obscureConfirmPassword;
+                    });
+                  },
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
@@ -722,16 +788,20 @@ class _AuthScreenState extends State<AuthScreen> {
                         ? 'يرجى تأكيد كلمة المرور'
                         : 'Please confirm your password';
                   }
+
                   if (value.trim() != _passwordController.text.trim()) {
                     return isArabic
                         ? 'كلمتا المرور غير متطابقتين'
                         : 'Passwords do not match';
                   }
+
                   return null;
                 },
               ),
             ],
+
             const SizedBox(height: 28),
+
             ElevatedButton(
               onPressed: _isLoading ? null : _submit,
               style: ElevatedButton.styleFrom(
@@ -779,13 +849,16 @@ class _AuthScreenState extends State<AuthScreen> {
                       ],
                     ),
             ),
+
             const SizedBox(height: 20),
+
             Center(
               child: GestureDetector(
                 onTap: () {
                   setState(() {
                     _isSignUp = !_isSignUp;
                   });
+
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     _formKey.currentState?.reset();
                   });
@@ -828,6 +901,10 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  // ===============================================================
+  // Toggle Tab
+  // ===============================================================
+
   Widget _buildToggleTab({
     required String title,
     required bool isSelected,
@@ -864,6 +941,10 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  // ===============================================================
+  // Input Field
+  // ===============================================================
+
   Widget _buildInputField({
     required TextEditingController controller,
     required String label,
@@ -887,7 +968,9 @@ class _AuthScreenState extends State<AuthScreen> {
             fontSize: 13,
           ),
         ),
+
         const SizedBox(height: 8),
+
         TextFormField(
           controller: controller,
           obscureText: obscureText,

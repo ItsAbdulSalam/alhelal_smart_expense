@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'presentation/screens/auth_screen.dart';
-import 'presentation/screens/dashboard_screen.dart';
+import 'presentation/screens/dashboard_loader.dart';
 import 'presentation/screens/splash_screen.dart';
 
 void main() {
@@ -79,9 +79,9 @@ class _MyAppState extends State<MyApp> {
     try {
       debugPrint('🚀 App initialization START');
 
-      // -----------------------------------------------------------
+      // =========================================================
       // Environment + Preferences
-      // -----------------------------------------------------------
+      // =========================================================
 
       // تحميل ملف البيئة وSharedPreferences بالتوازي.
       final results = await Future.wait([
@@ -133,7 +133,9 @@ class _MyAppState extends State<MyApp> {
       // Supabase initialization
       // =========================================================
 
-      final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+      final supabaseUrl =
+          dotenv.env['SUPABASE_URL'] ?? '';
+
       final supabaseAnonKey =
           dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
@@ -159,9 +161,12 @@ class _MyAppState extends State<MyApp> {
 
       final Widget nextScreen;
 
+      // إذا كان المستخدم مسجل الدخول مسبقًا:
+      // نفتح Loader الذي سيحمّل Dashboard عند الحاجة.
       if (session != null) {
-        nextScreen = const DashboardScreen();
+        nextScreen = const DashboardLoader();
       } else {
+        // إذا لم توجد جلسة نعرض شاشة تسجيل الدخول فقط.
         nextScreen = const AuthScreen();
       }
 
@@ -238,10 +243,9 @@ class _MyAppState extends State<MyApp> {
             _locale.languageCode == 'ar';
 
         return Directionality(
-          textDirection:
-              isArabic
-                  ? TextDirection.rtl
-                  : TextDirection.ltr,
+          textDirection: isArabic
+              ? TextDirection.rtl
+              : TextDirection.ltr,
           child: ConnectivityBanner(
             child: child ?? const SizedBox(),
           ),
