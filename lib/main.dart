@@ -1,4 +1,6 @@
 import 'package:alhelal_smart_expense/core/services/local_expense_service.dart';
+import 'package:alhelal_smart_expense/core/theme/app_theme.dart';
+import 'package:alhelal_smart_expense/core/theme/theme_controller.dart';
 import 'package:alhelal_smart_expense/core/utils/locale_controller.dart';
 import 'package:alhelal_smart_expense/l10n/app_localizations.dart';
 import 'package:alhelal_smart_expense/presentation/widgets/connectivity_banner.dart';
@@ -18,7 +20,6 @@ import 'presentation/screens/splash_screen.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // تشغيل الواجهة مباشرة، ثم تنفيذ عمليات التهيئة داخل MyApp.
   runApp(const MyApp());
 }
 
@@ -31,6 +32,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   Locale _locale = const Locale('ar');
+  ThemeMode _themeMode = ThemeMode.system;
 
   bool _initialized = false;
   Widget? _nextScreen;
@@ -39,15 +41,18 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
 
-    // الاستماع لأي تغيير لغة قادم من LocaleController.
+    // الاستماع لتغيير اللغة.
     LocaleController.locale.addListener(_onLocaleChanged);
+
+    // الاستماع لتغيير الثيم.
+    ThemeController.themeMode.addListener(_onThemeChanged);
 
     // بدء تهيئة التطبيق.
     _initializeApp();
   }
 
   // ===============================================================
-  // Locale Listener
+  // Locale
   // ===============================================================
 
   Future<void> _onLocaleChanged() async {
@@ -55,20 +60,31 @@ class _MyAppState extends State<MyApp> {
 
     if (!mounted) return;
 
-    // لا نعيد بناء التطبيق إذا كانت اللغة نفسها.
     if (_locale == newLocale) return;
 
     setState(() {
       _locale = newLocale;
     });
 
-    // حفظ اللغة لاستخدامها عند تشغيل التطبيق مرة أخرى.
     final prefs = await SharedPreferences.getInstance();
 
-    await prefs.setString(
-      'language_code',
-      newLocale.languageCode,
-    );
+    await prefs.setString('language_code', newLocale.languageCode);
+  }
+
+  // ===============================================================
+  // Theme
+  // ===============================================================
+
+  void _onThemeChanged() {
+    final newThemeMode = ThemeController.themeMode.value;
+
+    if (!mounted) return;
+
+    if (_themeMode == newThemeMode) return;
+
+    setState(() {
+      _themeMode = newThemeMode;
+    });
   }
 
   // ===============================================================
@@ -83,7 +99,6 @@ class _MyAppState extends State<MyApp> {
       // Environment + Preferences
       // =========================================================
 
-      // تحميل ملف البيئة وSharedPreferences بالتوازي.
       final results = await Future.wait([
         dotenv.load(fileName: '.env'),
         SharedPreferences.getInstance(),
@@ -91,22 +106,43 @@ class _MyAppState extends State<MyApp> {
 
       final prefs = results[1] as SharedPreferences;
 
-      final savedLangCode =
-          prefs.getString('language_code') ?? 'ar';
+      // ---------------------------------------------------------
+      // Language
+      // ---------------------------------------------------------
+
+      final savedLangCode = prefs.getString('language_code') ?? 'ar';
 
       final savedLocale = Locale(savedLangCode);
 
-      // تحديث LocaleController.
       LocaleController.locale.value = savedLocale;
 
-      // تحديث لغة التطبيق الحالية.
-      if (mounted && _locale != savedLocale) {
+      // ---------------------------------------------------------
+      // Theme
+      // ---------------------------------------------------------
+
+      final savedTheme = prefs.getString('theme_mode');
+
+      final savedThemeMode = switch (savedTheme) {
+        'light' => ThemeMode.light,
+        'dark' => ThemeMode.dark,
+        _ => ThemeMode.system,
+      };
+
+      ThemeController.themeMode.value = savedThemeMode;
+
+      // ---------------------------------------------------------
+      // Update local state once
+      // ---------------------------------------------------------
+
+      if (mounted) {
         setState(() {
           _locale = savedLocale;
+          _themeMode = savedThemeMode;
         });
       }
 
       debugPrint('✅ Environment + Preferences OK');
+      debugPrint('🎨 Theme mode: ${savedThemeMode.name}');
 
       // =========================================================
       // Hive initialization
@@ -116,14 +152,12 @@ class _MyAppState extends State<MyApp> {
 
       await Hive.initFlutter();
 
-      // فتح صندوق المصاريف.
       if (!Hive.isBoxOpen('expenses_box')) {
         await Hive.openBox('expenses_box');
       }
 
       debugPrint('✅ expenses_box opened');
 
-      // فتح وتهيئة Offline Queue.
       await LocalExpenseService.initQueueBox();
 
       debugPrint('✅ Offline Queue initialized');
@@ -133,11 +167,9 @@ class _MyAppState extends State<MyApp> {
       // Supabase initialization
       // =========================================================
 
-      final supabaseUrl =
-          dotenv.env['SUPABASE_URL'] ?? '';
+      final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
 
-      final supabaseAnonKey =
-          dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
 
       if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
         throw Exception(
@@ -156,17 +188,13 @@ class _MyAppState extends State<MyApp> {
       // Determine initial screen
       // =========================================================
 
-      final session =
-          Supabase.instance.client.auth.currentSession;
+      final session = Supabase.instance.client.auth.currentSession;
 
       final Widget nextScreen;
 
-      // إذا كان المستخدم مسجل الدخول مسبقًا:
-      // نفتح Loader الذي سيحمّل Dashboard عند الحاجة.
       if (session != null) {
         nextScreen = const DashboardLoader();
       } else {
-        // إذا لم توجد جلسة نعرض شاشة تسجيل الدخول فقط.
         nextScreen = const AuthScreen();
       }
 
@@ -198,6 +226,8 @@ class _MyAppState extends State<MyApp> {
   @override
   void dispose() {
     LocaleController.locale.removeListener(_onLocaleChanged);
+    ThemeController.themeMode.removeListener(_onThemeChanged);
+
     super.dispose();
   }
 
@@ -211,13 +241,13 @@ class _MyAppState extends State<MyApp> {
       title: 'Alhelal Smart Expense',
       debugShowCheckedModeBanner: false,
 
-      // اللغة الحالية.
+      // =========================================================
+      // Localization
+      // =========================================================
       locale: _locale,
 
-      // اللغات المدعومة.
       supportedLocales: AppLocalizations.supportedLocales,
 
-      // Localization delegates.
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
@@ -225,44 +255,35 @@ class _MyAppState extends State<MyApp> {
         GlobalCupertinoLocalizations.delegate,
       ],
 
-      // Theme.
-      theme: ThemeData(
-        useMaterial3: true,
-        fontFamily: 'Cairo',
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF4F46E5),
-        ),
-      ),
+      // =========================================================
+      // Theme
+      // =========================================================
+      theme: AppTheme.lightTheme,
+
+      darkTheme: AppTheme.darkTheme,
+
+      themeMode: _themeMode,
 
       // =========================================================
       // RTL / LTR + Connectivity Banner
       // =========================================================
-
       builder: (context, child) {
-        final isArabic =
-            _locale.languageCode == 'ar';
+        final isArabic = _locale.languageCode == 'ar';
 
         return Directionality(
-          textDirection: isArabic
-              ? TextDirection.rtl
-              : TextDirection.ltr,
-          child: ConnectivityBanner(
-            child: child ?? const SizedBox(),
-          ),
+          textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+          child: ConnectivityBanner(child: child ?? const SizedBox()),
         );
       },
 
       // =========================================================
-      // Initial screen
+      // Initial Screen
       // =========================================================
-
       home: !_initialized
           ? const _StartupScreen()
           : kIsWeb
-              ? _nextScreen!
-              : SplashScreen(
-                  nextScreen: _nextScreen!,
-                ),
+          ? _nextScreen!
+          : SplashScreen(nextScreen: _nextScreen!),
     );
   }
 }
@@ -276,10 +297,12 @@ class _StartupScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFF080E1A),
+    return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
-        child: CircularProgressIndicator(),
+        child: CircularProgressIndicator(
+          color: Theme.of(context).colorScheme.primary,
+        ),
       ),
     );
   }

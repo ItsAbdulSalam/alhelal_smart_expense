@@ -11,6 +11,7 @@ import 'add_expense_screen.dart';
 import 'auth_screen.dart';
 import '../../core/utils/locale_controller.dart';
 import '../../l10n/app_localizations.dart';
+import 'profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -1143,6 +1144,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             onPressed: _loadExpenses,
+          ),
+          IconButton(
+            tooltip: isArabic
+                ? 'الملف الشخصي والإعدادات'
+                : 'Profile & Settings',
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(6),
+            icon: Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+              child: Icon(
+                Icons.person_outline_rounded,
+                size: 18,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+            },
           ),
           const SizedBox(width: 4),
           IconButton(
