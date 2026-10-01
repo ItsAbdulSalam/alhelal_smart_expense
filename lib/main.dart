@@ -152,20 +152,25 @@ class _MyAppState extends State<MyApp> {
       // Hive initialization
       // =========================================================
 
+      // =========================================================
+      // Hive initialization (Web & Native Safe)
+      // =========================================================
+
       debugPrint('📦 Hive initialization START');
 
-      await Hive.initFlutter();
-
-      if (!Hive.isBoxOpen('expenses_box')) {
-        await Hive.openBox('expenses_box');
+      if (!kIsWeb) {
+        await Hive.initFlutter();
       }
 
-      debugPrint('✅ expenses_box opened');
-
-      await LocalExpenseService.initQueueBox();
-
-      debugPrint('✅ Offline Queue initialized');
-      debugPrint('✅ Hive initialization OK');
+      try {
+        if (!Hive.isBoxOpen('expenses_box')) {
+          await Hive.openBox('expenses_box');
+        }
+        await LocalExpenseService.initQueueBox();
+        debugPrint('✅ Hive initialization OK');
+      } catch (hiveErr) {
+        debugPrint('⚠️ Hive storage warning on Web: $hiveErr');
+      }
 
       // =========================================================
       // Supabase initialization (Dart-Define First with .env Fallback)
