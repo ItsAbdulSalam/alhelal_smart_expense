@@ -149,18 +149,11 @@ class _MyAppState extends State<MyApp> {
       debugPrint('🎨 Theme mode: ${savedThemeMode.name}');
 
       // =========================================================
-      // Hive initialization
       // =========================================================
-
-      // =========================================================
-      // Hive initialization (Web & Native Safe)
-      // =========================================================
-
-      // =========================================================
-      // Hive initialization (Safe for Web)
+      // Hive initialization (Isolated for Native Only)
       // =========================================================
       if (!kIsWeb) {
-        debugPrint('📦 Hive initialization START');
+        debugPrint('📦 Hive initialization START (Native)');
         await Hive.initFlutter();
         if (!Hive.isBoxOpen('expenses_box')) {
           await Hive.openBox('expenses_box');
@@ -168,8 +161,9 @@ class _MyAppState extends State<MyApp> {
         await LocalExpenseService.initQueueBox();
         debugPrint('✅ Hive initialization OK');
       } else {
-        debugPrint('🌐 Web detected: Skipping Native Hive filesystem');
+        debugPrint('🌐 Web WASM runtime detected: Native Hive bypass active');
       }
+
       // =========================================================
       // Supabase initialization (Dart-Define First with .env Fallback)
       // =========================================================
