@@ -3,7 +3,7 @@
   "outputDirectory": "build/web",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!assets/|canvaskit/|icons/|.*\\..*).*)",
       "destination": "/index.html"
     }
   ],
@@ -67,7 +67,16 @@
       ]
     },
     {
-      "source": "/(.*)\\.(js|dart\\.js)",
+      "source": "/main.dart.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, stale-while-revalidate=86400"
+        }
+      ]
+    },
+    {
+      "source": "/flutter_bootstrap.js",
       "headers": [
         {
           "key": "Cache-Control",
