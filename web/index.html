@@ -124,6 +124,9 @@
         }
       }
     </style>
+    <!-- Preconnect to Google Fonts & WASM CDN for zero DNS latency -->
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://www.gstatic.com" />
   </head>
   <body>
     <div id="web-splash">
@@ -135,6 +138,7 @@
           alt="Alhelal Smart Expense Logo"
           width="96"
           height="96"
+          fetchpriority="high"
           onerror="
             this.onerror = null;
             this.src = 'favicon.png';
