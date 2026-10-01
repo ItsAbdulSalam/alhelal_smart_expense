@@ -96,15 +96,19 @@ class _MyAppState extends State<MyApp> {
       debugPrint('🚀 App initialization START');
 
       // =========================================================
-      // Environment + Preferences
+      // Environment + Preferences (Safe Hybrid Loading)
       // =========================================================
 
-      final results = await Future.wait([
-        dotenv.load(fileName: '.env'),
-        SharedPreferences.getInstance(),
-      ]);
+      // محاولة تحميل .env محلياً فقط إن وُجد، وتجاهله تماماً في بيئة الويب دون إيقاف التطبيق
+      try {
+        await dotenv.load(fileName: '.env');
+      } catch (_) {
+        debugPrint(
+          'ℹ️ .env file not found or running on Web, relying on build-time env vars.',
+        );
+      }
 
-      final prefs = results[1] as SharedPreferences;
+      final prefs = await SharedPreferences.getInstance();
 
       // ---------------------------------------------------------
       // Language
@@ -164,23 +168,26 @@ class _MyAppState extends State<MyApp> {
       debugPrint('✅ Hive initialization OK');
 
       // =========================================================
-      // Supabase initialization
+      // Supabase initialization (Dart-Define First with .env Fallback)
       // =========================================================
 
-      final supabaseUrl = dotenv.env['SUPABASE_URL'] ?? '';
+      final supabaseUrl =
+          const String.fromEnvironment('SUPABASE_URL').isNotEmpty
+          ? const String.fromEnvironment('SUPABASE_URL')
+          : (dotenv.env['SUPABASE_URL'] ?? '');
 
-      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+      final supabaseAnonKey =
+          const String.fromEnvironment('SUPABASE_ANON_KEY').isNotEmpty
+          ? const String.fromEnvironment('SUPABASE_ANON_KEY')
+          : (dotenv.env['SUPABASE_ANON_KEY'] ?? '');
 
       if (supabaseUrl.isEmpty || supabaseAnonKey.isEmpty) {
         throw Exception(
-          'SUPABASE_URL أو SUPABASE_ANON_KEY غير موجود في ملف .env',
+          'SUPABASE_URL أو SUPABASE_ANON_KEY غير موجودة عبر dart-define أو .env',
         );
       }
 
-      await Supabase.initialize(
-        url: supabaseUrl,
-        publishableKey: supabaseAnonKey,
-      );
+      await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
 
       debugPrint('✅ Supabase OK');
 
