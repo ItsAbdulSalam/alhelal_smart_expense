@@ -7,7 +7,7 @@ declare const Deno: {
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-goog-api-key",
 };
 
 Deno.serve(async (req: Request) => {
@@ -30,8 +30,8 @@ Deno.serve(async (req: Request) => {
     const cleanedBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
     const prompt = `You are an expert OCR receipt parser.
-Extract information from the receipt accurately.
-If certain fields like merchant name or notes cannot be determined with certainty, make the best sensible estimate based on visible text.
+Extract information from the receipt accurately and return valid JSON.
+Return all text fields (title, merchant_name, notes) as clean single-line strings without raw newline breaks.
 
 Map "category" to exactly one of:
 - طعام ومشروبات
@@ -75,27 +75,64 @@ Map "category" to exactly one of:
       },
     };
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey.trim()}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
+    // تسلسل النماذج الاحتياطية لتفادي أي ضغط خوادم
+    const models = ["gemini-3.8-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    let parsedData: any = null;
+    let lastError = "";
+
+    for (const model of models) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": apiKey.trim(),
+              },
+              body: JSON.stringify(requestBody),
+            }
+          );
+
+          const data = await response.json();
+
+          if (response.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+            let rawText = data.candidates[0].content.parts[0].text.trim();
+            rawText = rawText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+            parsedData = JSON.parse(rawText);
+            break;
+          }
+
+          lastError = data.error?.message || JSON.stringify(data.error) || "Server busy";
+          
+          const isDemandError = 
+            lastError.toLowerCase().includes("high demand") || 
+            response.status === 429 || 
+            response.status === 503;
+
+          if (!isDemandError) {
+            // خطأ آخر ليس له علاقة بالضغط، لا داعي لإعادة المحاولة على نفس النموذج
+            break;
+          }
+
+          // انتظار تصاعدي قبل المحاولة مجدداً
+          await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+        } catch (e: any) {
+          lastError = e.message;
+        }
       }
-    );
 
-    const data = await response.json();
-
-    if (!response.ok || !data.candidates?.[0]?.content?.parts?.[0]?.text) {
-      const errorMsg = data.error?.message || "فشل تحليل الفاتورة من السيرفر";
-      throw new Error(errorMsg);
+      if (parsedData) {
+        break; // نجحت القراءة
+      }
     }
 
-    const rawText = data.candidates[0].content.parts[0].text.trim();
+    if (!parsedData) {
+      throw new Error(lastError || "فشل تحليل الفاتورة، يرجى المحاولة مجدداً");
+    }
 
-    return new Response(rawText, {
+    return new Response(JSON.stringify(parsedData), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
