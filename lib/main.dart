@@ -17,9 +17,10 @@ import 'presentation/screens/auth_screen.dart';
 import 'presentation/screens/dashboard_loader.dart';
 import 'presentation/screens/splash_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // تشغيل الواجهة مباشرة لتحرير الـ Main Thread وتمرير أول فحص لـ Lighthouse
   runApp(const MyApp());
 }
 
@@ -41,14 +42,16 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
 
-    // الاستماع لتغيير اللغة.
+    // الاستماع لتغيير اللغة
     LocaleController.locale.addListener(_onLocaleChanged);
 
-    // الاستماع لتغيير الثيم.
+    // الاستماع لتغيير الثيم
     ThemeController.themeMode.addListener(_onThemeChanged);
 
-    // بدء تهيئة التطبيق.
-    _initializeApp();
+    // تأجيل بدء تهيئة التطبيق لما بعد رسم الإطار الأول لتحرير الـ Main Thread
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeApp();
+    });
   }
 
   // ===============================================================
