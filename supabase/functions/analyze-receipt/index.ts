@@ -1,4 +1,3 @@
-// تعريف نوع Deno محلياً لمنع تنبيهات VS Code TypeScript
 declare const Deno: {
   serve: (handler: (req: Request) => Promise<Response>) => void;
   env: {
@@ -21,72 +20,82 @@ Deno.serve(async (req: Request) => {
     const apiKey = Deno.env.get("GEMINI_API_KEY");
 
     if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is missing from environment");
+      throw new Error("GEMINI_API_KEY is not configured in Supabase Secrets");
     }
 
-    const prompt = `You are a senior professional financial accountant and OCR expert analyzing an official receipt or utility invoice (electricity, water, gas, telecom, supermarket, restaurant, etc.).
+    if (!imageBase64) {
+      throw new Error("No image data provided");
+    }
 
-Analyze this invoice image with extreme accuracy and extract the data as a clean JSON object without any Markdown formatting or code fences:
+    const cleanedBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, "");
 
-{
-  "title": "Clear descriptive title in Arabic (e.g. فاتورة كهرباء, فاتورة غاز, مشتريات سوبرماركت)",
-  "merchant_name": "Official company/store name exactly as written (e.g. CK BOĞAZİÇİ ELEKTRİK PERAKENDE SATIŞ A.Ş.)",
-  "amount": 0.0,
-  "currency": "TRY",
-  "category": "One of: طعام ومشروبات, تسوق, مواصلات, فواتير وخدمات, صحة, أخرى",
-  "date": "YYYY-MM-DD",
-  "notes": "Any brief additional relevant notes or null"
-}
+    const prompt = `You are an expert OCR receipt parser.
+Extract information from the receipt accurately.
+If certain fields like merchant name or notes cannot be determined with certainty, make the best sensible estimate based on visible text.
 
-CRITICAL RULES FOR ACCURACY:
-1. "amount" (EXACT PAYABLE AMOUNT):
-   - You MUST extract the FINAL NET PAYABLE AMOUNT that the consumer is required to pay.
-   - For Turkish utility bills (CK Boğaziçi, İGDAŞ, İSKİ, Enerjisa, Türk Telekom, etc.), DO NOT use the pre-rounded subtotal. Instead, find the highlighted/boxed "Ödenecek Tutar", "Fatura Tutarı" in the main top/due-date summary box.
-   - Return "amount" strictly as a number.
+Map "category" to exactly one of:
+- طعام ومشروبات
+- تسوق
+- مواصلات
+- فواتير وخدمات
+- صحة
+- أخرى`;
 
-2. "date":
-   - Use official invoice date ("Fatura Tarihi" or "Düzenleme Tarihi") formatted strictly as YYYY-MM-DD.
-
-3. "category":
-   - Utility companies MUST ALWAYS be categorized as "فواتير وخدمات".
-
-Return ONLY the raw JSON object.`;
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            {
+              inline_data: {
+                mime_type: "image/jpeg",
+                data: cleanedBase64,
+              },
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        response_mime_type: "application/json",
+        response_schema: {
+          type: "OBJECT",
+          properties: {
+            title: { type: "STRING" },
+            merchant_name: { type: "STRING" },
+            amount: { type: "NUMBER" },
+            currency: { type: "STRING" },
+            category: { type: "STRING" },
+            date: { type: "STRING" },
+            notes: { type: "STRING" }
+          },
+          required: ["title", "merchant_name", "amount", "currency", "category", "date"]
+        },
+        maxOutputTokens: 2048,
+        temperature: 0.1,
+      },
+    };
 
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey.trim()}`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-goog-api-key": apiKey,
         },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: prompt },
-                { inline_data: { mime_type: "image/jpeg", data: imageBase64 } },
-              ],
-            },
-          ],
-          generationConfig: { response_mime_type: "application/json" },
-        }),
+        body: JSON.stringify(requestBody),
       }
     );
 
     const data = await response.json();
-    const candidateText = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    if (!candidateText) {
-      throw new Error("No data returned from Gemini API");
+    if (!response.ok || !data.candidates?.[0]?.content?.parts?.[0]?.text) {
+      const errorMsg = data.error?.message || "فشل تحليل الفاتورة من السيرفر";
+      throw new Error(errorMsg);
     }
 
-    const cleanJson = candidateText
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
+    const rawText = data.candidates[0].content.parts[0].text.trim();
 
-    return new Response(cleanJson, {
+    return new Response(rawText, {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {
