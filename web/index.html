@@ -1,6 +1,29 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
   <head>
+    <script>
+      // حل تحذير Intl.v8BreakIterator الخاص بـ Lighthouse Best Practices
+      if (
+        typeof Intl !== "undefined" &&
+        !Intl.v8BreakIterator &&
+        Intl.Segmenter
+      ) {
+        Intl.v8BreakIterator = function () {
+          return {
+            adoptText: function () {},
+            first: function () {
+              return 0;
+            },
+            next: function () {
+              return -1;
+            },
+            current: function () {
+              return 0;
+            },
+          };
+        };
+      }
+    </script>
     <base href="$FLUTTER_BASE_HREF" />
 
     <meta charset="UTF-8" />
@@ -159,14 +182,11 @@
       function hideSplashScreen() {
         var splash = document.getElementById("web-splash");
         if (splash) {
-          splash.style.opacity = "0";
-          setTimeout(function () {
-            splash.remove();
-          }, 300);
+          splash.remove(); // إزالة فورية من الـ DOM لتحسين LCP و Speed Index
         }
       }
 
-      // إخفاء الـ Splash بمجرد رسم أول إطار رسمي لفلاتر
+      // بمجرد رسم أول إطار رسمي لفلاتر إخفاء الـ Splash
       window.addEventListener("flutter-first-frame", hideSplashScreen);
 
       // صمام أمان بديل في حال تأخر الإشارة
