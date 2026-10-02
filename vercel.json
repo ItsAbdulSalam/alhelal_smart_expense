@@ -3,7 +3,7 @@
   "outputDirectory": "web_release",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!.*\\.[\\w]+$).*)",
       "destination": "/index.html"
     }
   ],
@@ -44,7 +44,7 @@
       ]
     },
     {
-      "source": "/(.*)\\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf)",
+      "source": "/(.*)\\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|txt|json)",
       "headers": [
         {
           "key": "Cache-Control",

@@ -1,7 +1,6 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
   <head>
-    <link rel="preload" href="main.dart.js" as="script" />
     <base href="/" />
 
     <meta charset="UTF-8" />
@@ -11,6 +10,9 @@
       name="description"
       content="Alhelal Smart Expense - رفيقك المالي الذكي لإدارة وتحليل النفقات والفواتير بدقة متناهية عبر الذكاء الاصطناعي."
     />
+
+    <!-- Theme Color for Browser Chrome -->
+    <meta name="theme-color" content="#030816" />
 
     <!-- iOS meta tags & icons -->
     <meta name="mobile-web-app-capable" content="yes" />
@@ -26,6 +28,10 @@
 
     <title>Alhelal Smart Expense</title>
     <link rel="manifest" href="manifest.json" />
+
+    <!-- Preconnect to Google Fonts & WASM CDN for zero DNS latency -->
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+    <link rel="dns-prefetch" href="https://www.gstatic.com" />
 
     <style id="splash-screen-style">
       * {
@@ -125,14 +131,10 @@
         }
       }
     </style>
-    <!-- Preconnect to Google Fonts & WASM CDN for zero DNS latency -->
-    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
-    <link rel="dns-prefetch" href="https://www.gstatic.com" />
   </head>
   <body>
     <div id="web-splash">
       <div class="splash-card">
-        <!-- استخدام Icon-192 بدلاً من 512 لتسريع التحميل والتخلص من تنبيه LCP/Image Delivery -->
         <img
           class="splash-logo"
           src="icons/Icon-192.png"
@@ -164,14 +166,14 @@
         }
       }
 
-      // فحص سريع خفيف بدون ثقل الـ MutationObserver على الـ Main Thread
+      // إخفاء الـ Splash بمجرد رسم أول إطار رسمي لفلاتر
       window.addEventListener("flutter-first-frame", hideSplashScreen);
 
-      // صمام أمان بديل
+      // صمام أمان بديل في حال تأخر الإشارة
       setTimeout(hideSplashScreen, 3000);
     </script>
 
-    <!-- المحرك الرسمي النظيف لـ Flutter Web مع WASM -->
+    <!-- المحرك المدمج النظيف لـ Flutter Web مع دعم WASM -->
     <script src="flutter_bootstrap.js" async></script>
   </body>
 </html>
