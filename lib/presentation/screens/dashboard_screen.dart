@@ -45,6 +45,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _repository = ExpenseRepository(Supabase.instance.client);
 
+    // تأخير الـ 150ms الضروري لأداء التليفون وخفض الـ TBT
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted) _loadExpenses();
@@ -219,7 +220,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Icons.category_rounded;
   }
 
-  void _showSetBudgetDialog() {
+  void _showSetBudgetDialog(
+    bool isDark,
+    Color cardBg,
+    Color textColor,
+    Color subTextColor,
+    Color borderColor,
+  ) {
     final localizations = AppLocalizations.of(context)!;
     final controller = TextEditingController(
       text: _monthlyBudget.toStringAsFixed(0),
@@ -227,14 +234,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: cardBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: borderColor),
+        ),
         title: Row(
           children: [
             const Icon(Icons.tune_rounded, color: Color(0xFF4F46E5)),
             const SizedBox(width: 8),
             Text(
               localizations.monthlyBudget,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
             ),
           ],
         ),
@@ -242,29 +257,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'أدخل سقف الإنفاق المستهدف لهذا الشهر لتلقي تنبيهات دورية:',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
+              style: TextStyle(fontSize: 13, color: subTextColor),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
+              style: TextStyle(color: textColor, fontWeight: FontWeight.w700),
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
               autofocus: true,
               decoration: InputDecoration(
                 suffixText: 'TRY',
-                prefixIcon: const Icon(
+                suffixStyle: TextStyle(
+                  color: subTextColor,
+                  fontWeight: FontWeight.bold,
+                ),
+                prefixIcon: Icon(
                   Icons.account_balance_wallet_outlined,
                   size: 20,
+                  color: subTextColor,
                 ),
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 12,
                 ),
+                filled: true,
+                fillColor: isDark
+                    ? const Color(0xFF0B132B)
+                    : const Color(0xFFF8FAFC),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: borderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: borderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF4F46E5),
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -273,12 +310,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text(localizations.cancel),
+            child: Text(
+              localizations.cancel,
+              style: TextStyle(color: subTextColor),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF4F46E5),
               foregroundColor: Colors.white,
+              elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
@@ -297,7 +338,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showExpenseDetails(ExpenseModel expense) {
+  void _showExpenseDetails(
+    ExpenseModel expense,
+    bool isDark,
+    Color cardBg,
+    Color textColor,
+    Color subTextColor,
+    Color borderColor,
+  ) {
     String? fullImageUrl;
     if (expense.receiptImagePath != null &&
         expense.receiptImagePath!.isNotEmpty) {
@@ -318,9 +366,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         textDirection: ui.TextDirection.rtl,
         child: Container(
           padding: const EdgeInsets.all(24),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: borderColor),
           ),
           child: SingleChildScrollView(
             child: Column(
@@ -332,7 +381,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     width: 44,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
+                      color: isDark
+                          ? const Color(0xFF334155)
+                          : const Color(0xFFCBD5E1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -344,17 +395,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: Text(
                         expense.title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          color: textColor,
                         ),
                       ),
                     ),
                     Text(
                       '${expense.amount.toStringAsFixed(2)} ${expense.currency}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w900,
+                        color: textColor,
                       ),
                     ),
                   ],
@@ -364,20 +417,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 6),
                   Text(
                     expense.merchantName!,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                    style: TextStyle(color: subTextColor, fontSize: 13),
                   ),
                 ],
-                const Divider(height: 28),
+                Divider(height: 28, color: borderColor),
                 _buildDetailRow(
                   Icons.calendar_month_rounded,
                   'تاريخ الفاتورة',
                   DateFormat('yyyy-MM-dd').format(expense.expenseDate),
+                  subTextColor,
+                  textColor,
                 ),
                 const SizedBox(height: 10),
                 _buildDetailRow(
                   _getCategoryIcon(expense.category),
                   'التصنيف',
                   _getTranslatedCategory(context, expense.category),
+                  subTextColor,
+                  textColor,
                 ),
                 if (expense.notes != null && expense.notes!.isNotEmpty) ...[
                   const SizedBox(height: 10),
@@ -385,6 +442,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Icons.note_alt_outlined,
                     'ملاحظات',
                     expense.notes!,
+                    subTextColor,
+                    textColor,
                   ),
                 ],
                 if (fullImageUrl != null) ...[
@@ -396,7 +455,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       height: 200,
                       width: double.infinity,
                       fit: BoxFit.contain,
-                      cacheWidth: 600, // تحجيم الصورة لمنع استهلاك الذاكرة
+                      cacheWidth: 600, // منع استهلاك الذاكرة
                     ),
                   ),
                 ],
@@ -409,25 +468,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
+  Widget _buildDetailRow(
+    IconData icon,
+    String label,
+    String value,
+    Color subTextColor,
+    Color textColor,
+  ) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: Colors.grey.shade700),
+        Icon(icon, size: 18, color: subTextColor),
         const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-        ),
+        Text(label, style: TextStyle(color: subTextColor, fontSize: 13)),
         const Spacer(),
         Text(
           value,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            color: textColor,
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildBudgetCard(double totalSpent) {
+  Widget _buildBudgetCard(
+    double totalSpent,
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color textColor,
+    Color subTextColor,
+  ) {
     final localizations = AppLocalizations.of(context)!;
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
@@ -464,9 +537,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -487,16 +560,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(width: 10),
                   Text(
                     localizations.monthlyBudget,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w800,
                       fontSize: 15,
-                      color: Color(0xFF0F172A),
+                      color: textColor,
                     ),
                   ),
                 ],
               ),
               InkWell(
-                onTap: _showSetBudgetDialog,
+                onTap: () => _showSetBudgetDialog(
+                  isDark,
+                  cardBg,
+                  textColor,
+                  subTextColor,
+                  borderColor,
+                ),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -521,7 +600,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: LinearProgressIndicator(
               value: ratio.clamp(0.0, 1.0),
               minHeight: 10,
-              backgroundColor: const Color(0xFFF1F5F9),
+              backgroundColor: isDark
+                  ? const Color(0xFF1E293B)
+                  : const Color(0xFFF1F5F9),
               valueColor: AlwaysStoppedAnimation<Color>(stateColor),
             ),
           ),
@@ -557,6 +638,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildInteractiveChart(
     Map<String, double> categoryTotals,
     double totalAmount,
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color textColor,
+    Color subTextColor,
   ) {
     final localizations = AppLocalizations.of(context)!;
     final entries = categoryTotals.entries.toList();
@@ -564,9 +650,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardBg,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -584,10 +670,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(width: 8),
                   Text(
                     localizations.expenseDistribution,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF0F172A),
+                      color: textColor,
                     ),
                   ),
                 ],
@@ -596,13 +682,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 '${entries.length} ${localizations.sectionsCount}',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey.shade500,
+                  color: subTextColor,
                   fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
-          const Divider(height: 24, color: Color(0xFFF1F5F9)),
+          Divider(height: 24, color: borderColor),
           LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth > 580;
@@ -654,7 +740,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade500,
+                            color: subTextColor,
                           ),
                         ),
                         Text(
@@ -662,10 +748,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   _touchedChartIndex < entries.length
                               ? '${entries[_touchedChartIndex].value.toStringAsFixed(1)} ₺'
                               : '${totalAmount.toStringAsFixed(1)} ₺',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w900,
-                            color: Color(0xFF0F172A),
+                            color: textColor,
                           ),
                         ),
                       ],
@@ -697,26 +783,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Expanded(
                           child: Text(
                             entry.key,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF334155),
+                              color: textColor,
                             ),
                           ),
                         ),
                         Text(
                           '$percent% ',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade400,
-                          ),
+                          style: TextStyle(fontSize: 12, color: subTextColor),
                         ),
                         Text(
                           '${entry.value.toStringAsFixed(1)} TRY',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w800,
-                            color: Color(0xFF0F172A),
+                            color: textColor,
                           ),
                         ),
                       ],
@@ -750,7 +833,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildFilterAndSearchBar() {
+  Widget _buildFilterAndSearchBar(
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color textColor,
+    Color subTextColor,
+  ) {
     final localizations = AppLocalizations.of(context)!;
 
     final timeFilters = [
@@ -772,15 +861,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TextField(
             controller: _searchController,
+            style: TextStyle(color: textColor, fontWeight: FontWeight.w600),
             onChanged: (val) {
               setState(() {
                 _searchQuery = val;
@@ -792,6 +882,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             decoration: InputDecoration(
               isDense: true,
               hintText: localizations.searchHint,
+              hintStyle: TextStyle(color: subTextColor),
+              filled: true,
+              fillColor: isDark
+                  ? const Color(0xFF0B132B)
+                  : const Color(0xFFF8FAFC),
               prefixIcon: const Icon(
                 Icons.search_rounded,
                 color: Color(0xFF6366F1),
@@ -799,6 +894,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: borderColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: borderColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Color(0xFF4F46E5),
+                  width: 1.5,
+                ),
               ),
             ),
           ),
@@ -813,9 +920,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(width: 6),
               Text(
                 localizations.timeFilter,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
+                  color: textColor,
                 ),
               ),
             ],
@@ -861,16 +969,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? const Color(0xFF1E293B)
-                            : const Color(0xFFF1F5F9),
+                            ? (isDark
+                                  ? const Color(0xFF38BDF8)
+                                  : const Color(0xFF1E293B))
+                            : (isDark
+                                  ? const Color(0xFF1E293B)
+                                  : const Color(0xFFF1F5F9)),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
                         tf,
                         style: TextStyle(
                           color: isSelected
-                              ? Colors.white
-                              : const Color(0xFF475569),
+                              ? (isDark ? Colors.black : Colors.white)
+                              : subTextColor,
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
                         ),
@@ -881,7 +993,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               }).toList(),
             ),
           ),
-          const Divider(height: 22),
+          Divider(height: 22, color: borderColor),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -904,15 +1016,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   decoration: BoxDecoration(
                     color: isSelected
                         ? const Color(0xFF4F46E5)
-                        : const Color(0xFFF1F5F9),
+                        : (isDark
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFF1F5F9)),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     cat,
                     style: TextStyle(
-                      color: isSelected
-                          ? Colors.white
-                          : const Color(0xFF475569),
+                      color: isSelected ? Colors.white : subTextColor,
                       fontWeight: FontWeight.bold,
                       fontSize: 12.5,
                     ),
@@ -943,8 +1055,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 900;
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // استقرار الألوان والتباين التام لمنع البهتان في وضع النظام والوضع الفاتح
+    final scaffoldBg = isDark
+        ? const Color(0xFF030712)
+        : const Color(0xFFF1F5F9);
+    final cardBg = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final borderColor = isDark
+        ? const Color(0xFF1E293B)
+        : const Color(0xFFE2E8F0);
+    final textColor = isDark
+        ? const Color(0xFFF8FAFC)
+        : const Color(0xFF0F172A);
+    final subTextColor = isDark
+        ? const Color(0xFF94A3B8)
+        : const Color(0xFF64748B);
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: scaffoldBg,
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.transparent,
@@ -962,10 +1092,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Text(
                 localizations.appTitle,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 18,
-                  color: Color(0xFF0F172A),
+                  color: textColor,
                 ),
               ),
             ),
@@ -1116,9 +1246,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Container(
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cardBg,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFCBD5E1)),
+                border: Border.all(color: borderColor),
               ),
               child: const Icon(
                 Icons.folder_shared_rounded,
@@ -1135,45 +1265,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: Container(
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cardBg,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFCBD5E1)),
+                border: Border.all(color: borderColor),
               ),
-              child: const Icon(
-                Icons.refresh_rounded,
-                size: 18,
-                color: Color(0xFF475569),
-              ),
+              child: Icon(Icons.refresh_rounded, size: 18, color: subTextColor),
             ),
             onPressed: _loadExpenses,
           ),
-          IconButton(
-            tooltip: isArabic
-                ? 'الملف الشخصي والإعدادات'
-                : 'Profile & Settings',
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(6),
-            icon: Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                ),
-              ),
-              child: Icon(
-                Icons.person_outline_rounded,
-                size: 18,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            onPressed: () {
-              Navigator.of(
-                context,
-              ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
-            },
-          ),
+          const SizedBox(width: 4),
+          // زر البروفايل التفاعلي الجديد بالصورة الحقيقية
+          const DashboardUserAvatarButton(),
           const SizedBox(width: 4),
           IconButton(
             tooltip: localizations.logout,
@@ -1182,9 +1284,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: Container(
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cardBg,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFCBD5E1)),
+                border: Border.all(color: borderColor),
               ),
               child: const Icon(
                 Icons.logout_rounded,
@@ -1196,8 +1298,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               final shouldLogout = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
+                  backgroundColor: cardBg,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18),
+                    side: BorderSide(color: borderColor),
                   ),
                   title: Row(
                     children: [
@@ -1206,23 +1310,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         color: Color(0xFFEF4444),
                       ),
                       const SizedBox(width: 8),
-                      Text(localizations.logout),
+                      Text(
+                        localizations.logout,
+                        style: TextStyle(color: textColor),
+                      ),
                     ],
                   ),
                   content: Text(
                     isArabic
                         ? 'هل أنت متأكد أنك تريد تسجيل الخروج من التطبيق؟'
                         : 'Are you sure you want to log out of the app?',
+                    style: TextStyle(color: subTextColor),
                   ),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(ctx, false),
-                      child: Text(localizations.cancel),
+                      child: Text(
+                        localizations.cancel,
+                        style: TextStyle(color: subTextColor),
+                      ),
                     ),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFEF4444),
                         foregroundColor: Colors.white,
+                        elevation: 0,
                       ),
                       onPressed: () => Navigator.pop(ctx, true),
                       child: Text(localizations.logout),
@@ -1270,7 +1382,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 final totalAmount = _cachedTotalAmount;
                 final categoryTotals = _cachedCategoryTotals;
 
-                // استخدام ListView.builder بدلاً من ListView العادي لتوفير الذاكرة وسرعة المعالجة
+                // استخدام ListView.builder / Slivers بدلاً من ListView العادي لتوفير الذاكرة وسرعة المعالجة
                 return CustomScrollView(
                   slivers: [
                     SliverToBoxAdapter(
@@ -1341,14 +1453,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-                            _buildBudgetCard(totalAmount),
+                            _buildBudgetCard(
+                              totalAmount,
+                              isDark,
+                              cardBg,
+                              borderColor,
+                              textColor,
+                              subTextColor,
+                            ),
                             const SizedBox(height: 16),
-                            _buildFilterAndSearchBar(),
+                            _buildFilterAndSearchBar(
+                              isDark,
+                              cardBg,
+                              borderColor,
+                              textColor,
+                              subTextColor,
+                            ),
                             const SizedBox(height: 18),
                             if (categoryTotals.isNotEmpty) ...[
                               _buildInteractiveChart(
                                 categoryTotals,
                                 totalAmount,
+                                isDark,
+                                cardBg,
+                                borderColor,
+                                textColor,
+                                subTextColor,
                               ),
                               const SizedBox(height: 22),
                             ],
@@ -1357,10 +1487,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               children: [
                                 Text(
                                   '${localizations.transactions} (${filteredExpenses.length})',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w800,
-                                    color: Color(0xFF0F172A),
+                                    color: textColor,
                                   ),
                                 ),
                                 Container(
@@ -1369,25 +1499,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     vertical: 3,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: cardBg,
                                     borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(
-                                      color: const Color(0xFFE2E8F0),
-                                    ),
+                                    border: Border.all(color: borderColor),
                                   ),
                                   child: Row(
                                     children: [
                                       Icon(
                                         Icons.swipe_left_rounded,
                                         size: 13,
-                                        color: Colors.grey.shade500,
+                                        color: subTextColor,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
                                         localizations.swipeToDelete,
                                         style: TextStyle(
                                           fontSize: 11,
-                                          color: Colors.grey.shade600,
+                                          color: subTextColor,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
@@ -1449,8 +1577,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             return await showDialog(
                               context: context,
                               builder: (ctx) => AlertDialog(
+                                backgroundColor: cardBg,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(18),
+                                  side: BorderSide(color: borderColor),
                                 ),
                                 title: Row(
                                   children: [
@@ -1463,6 +1593,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       isArabic
                                           ? 'تأكيد الحذف'
                                           : 'Confirm Delete',
+                                      style: TextStyle(color: textColor),
                                     ),
                                   ],
                                 ),
@@ -1470,16 +1601,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   isArabic
                                       ? 'هل تريد حذف فاتورة "${expense.title}" نهائياً؟'
                                       : 'Do you want to delete "${expense.title}" permanently?',
+                                  style: TextStyle(color: subTextColor),
                                 ),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(ctx, false),
-                                    child: Text(localizations.cancel),
+                                    child: Text(
+                                      localizations.cancel,
+                                      style: TextStyle(color: subTextColor),
+                                    ),
                                   ),
                                   ElevatedButton(
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.redAccent,
                                       foregroundColor: Colors.white,
+                                      elevation: 0,
                                     ),
                                     onPressed: () => Navigator.pop(ctx, true),
                                     child: Text(localizations.delete),
@@ -1496,15 +1632,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: const Color(0xFFE2E8F0),
-                              ),
+                              border: Border.all(color: borderColor),
                             ),
                             child: Material(
-                              color: Colors.white,
+                              color: cardBg,
                               borderRadius: BorderRadius.circular(16),
                               child: ListTile(
-                                onTap: () => _showExpenseDetails(expense),
+                                onTap: () => _showExpenseDetails(
+                                  expense,
+                                  isDark,
+                                  cardBg,
+                                  textColor,
+                                  subTextColor,
+                                  borderColor,
+                                ),
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 18,
                                   vertical: 10,
@@ -1525,9 +1666,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                                 title: Text(
                                   expense.title,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14.5,
+                                    color: textColor, // تباين قوي بدون بهتان
                                   ),
                                 ),
                                 subtitle: Column(
@@ -1540,8 +1682,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         child: Text(
                                           expense.merchantName!,
                                           style: TextStyle(
-                                            color: Colors.grey.shade600,
+                                            color:
+                                                subTextColor, // رمادي متزن مقروء
                                             fontSize: 12.5,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                       ),
@@ -1549,7 +1693,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     Text(
                                       '$translatedCategory • ${DateFormat('yyyy-MM-dd').format(expense.expenseDate)}',
                                       style: TextStyle(
-                                        color: Colors.grey.shade400,
+                                        color: subTextColor.withValues(
+                                          alpha: 0.8,
+                                        ),
                                         fontSize: 11.5,
                                       ),
                                     ),
@@ -1566,9 +1712,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       children: [
                                         Text(
                                           '${expense.amount.toStringAsFixed(2)} ${expense.currency}',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontWeight: FontWeight.w800,
                                             fontSize: 15,
+                                            color: textColor,
                                           ),
                                         ),
                                         if (hasImage)
@@ -1589,10 +1736,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                   isArabic
                                                       ? 'مرفق صورة'
                                                       : 'Attached',
-                                                  style: TextStyle(
+                                                  style: const TextStyle(
                                                     fontSize: 10.5,
-                                                    color:
-                                                        Colors.indigo.shade600,
+                                                    color: Color(0xFF4F46E5),
                                                     fontWeight: FontWeight.bold,
                                                   ),
                                                 ),
@@ -1633,6 +1779,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
         label: Text(
           localizations.newExpense,
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+        ),
+      ),
+    );
+  }
+}
+
+/// زر الأفاتار التفاعلي المدمج في الشريط العلوي لعرض صورة الحساب الحقيقية
+class DashboardUserAvatarButton extends StatelessWidget {
+  const DashboardUserAvatarButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = Supabase.instance.client.auth.currentUser;
+    final metadata = user?.userMetadata ?? {};
+    final avatarUrl = metadata['avatar_url']?.toString();
+    final fullName = metadata['full_name']?.toString() ?? user?.email ?? 'U';
+    final initial = fullName.trim().isNotEmpty
+        ? fullName.trim()[0].toUpperCase()
+        : 'U';
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Tooltip(
+      message: 'الملف الشخصي والإعدادات',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            await Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+          },
+          child: Container(
+            width: 36,
+            height: 36,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [const Color(0xFF6366F1), const Color(0xFF38BDF8)]
+                    : [const Color(0xFF4F46E5), const Color(0xFF0EA5E9)],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color:
+                      (isDark
+                              ? const Color(0xFF6366F1)
+                              : const Color(0xFF4F46E5))
+                          .withValues(alpha: 0.25),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                child: (avatarUrl != null && avatarUrl.trim().isNotEmpty)
+                    ? Image.network(
+                        avatarUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) =>
+                            _buildInitial(initial, isDark),
+                      )
+                    : _buildInitial(initial, isDark),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInitial(String char, bool isDark) {
+    return Center(
+      child: Text(
+        char,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w800,
+          color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF4F46E5),
         ),
       ),
     );
