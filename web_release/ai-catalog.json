@@ -1,0 +1,7 @@
+{
+  "name": "Alhelal Smart Expense",
+  "description": "Smart financial companion to seamlessly manage and analyze expenses.",
+  "url": "https://alhelal-smart-expense.vercel.app/",
+  "version": "1.0.0",
+  "capabilities": ["expense-tracking", "receipt-analysis", "budget-monitoring"]
+}

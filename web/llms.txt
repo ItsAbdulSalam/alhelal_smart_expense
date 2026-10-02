@@ -1,0 +1,9 @@
+# Alhelal Smart Expense
+
+> رفيقك المالي الذكي لإدارة وتحليل النفقات والفواتير بدقة متناهية عبر الذكاء الاصطناعي.
+
+Alhelal Smart Expense is a modern web and mobile application designed to help users track personal and business expenses, scan receipts with AI, and manage monthly budgets seamlessly.
+
+## Key Links
+- [Web Application](https://alhelal-smart-expense.vercel.app/)
+- [Documentation](https://alhelal-smart-expense.vercel.app/)
