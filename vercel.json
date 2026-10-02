@@ -5,7 +5,11 @@
   "rewrites": [
     {
       "source": "/assets/.env",
-      "destination": "/assets/.env"
+      "destination": "/favicon.png"
+    },
+    {
+      "source": "/flutter.js.map",
+      "destination": "/ai-catalog.json"
     },
     {
       "source": "/((?!.*\\.[\\w]+$).*)",
@@ -49,7 +53,7 @@
       ]
     },
     {
-      "source": "/(.*)\\.(js|mjs|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|txt|json|map|env)",
+      "source": "/(.*)\\.(js|mjs|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|txt|json)",
       "headers": [
         {
           "key": "Cache-Control",
