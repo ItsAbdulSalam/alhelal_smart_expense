@@ -108,11 +108,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         throw Exception('الحد الأقصى لحجم الصورة هو 5 ميجابايت.');
       }
 
-      final ext = pickedFile.name.split('.').last.toLowerCase();
-      final validExt = ['png', 'webp', 'jpg', 'jpeg'].contains(ext)
-          ? ext
-          : 'jpg';
-      final path = '${_user!.id}/avatar.$validExt';
+      final rawExt = pickedFile.name.split('.').last.toLowerCase();
+      // توحيد الامتداد ونوع الـ MIME القياسي
+      final fileExt = (rawExt == 'jpeg' || rawExt == 'jpg')
+          ? 'jpg'
+          : (rawExt == 'png' ? 'png' : (rawExt == 'webp' ? 'webp' : 'jpg'));
+
+      final mimeType = (fileExt == 'png')
+          ? 'image/png'
+          : (fileExt == 'webp'
+                ? 'image/webp'
+                : 'image/jpeg'); // استخدام image/jpeg حصراً
+
+      final path = '${_user!.id}/avatar.$fileExt';
 
       await _supabase.storage
           .from('avatars')
@@ -121,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             bytes,
             fileOptions: FileOptions(
               upsert: true,
-              contentType: 'image/$validExt',
+              contentType: mimeType, // يرسل image/jpeg السليم
             ),
           );
 
