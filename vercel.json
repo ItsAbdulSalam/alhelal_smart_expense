@@ -1,59 +1,29 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "outputDirectory": "web_release",
-  "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/assets/.env",
-      "destination": "/favicon.png"
-    },
-    {
-      "source": "/flutter.js.map",
-      "destination": "/ai-catalog.json"
-    },
-    {
-      "source": "/((?!.*\\.[\\w]+$).*)",
-      "destination": "/index.html"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
         {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "credentialless"
+        },
+        {
           "key": "Cross-Origin-Opener-Policy",
           "value": "same-origin"
-        },
-        {
-          "key": "Cross-Origin-Embedder-Policy",
-          "value": "require-corp"
         }
       ]
     },
     {
-      "source": "/(.*)\\.wasm",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/wasm"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    },
-    {
-      "source": "/assets/(.*)",
+      "source": "/(index.html|flutter_service_worker.js|flutter_bootstrap.js|version.json)",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
+          "value": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
         }
       ]
     },
     {
-      "source": "/(.*)\\.(js|mjs|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|txt|json)",
+      "source": "/(.*\\.(?:wasm|png|jpg|jpeg|webp|svg|ico|otf|ttf|woff|woff2))",
       "headers": [
         {
           "key": "Cache-Control",
