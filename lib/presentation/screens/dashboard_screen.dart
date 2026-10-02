@@ -44,9 +44,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _repository = ExpenseRepository(Supabase.instance.client);
-    // تأجيل بدء تحميل البيانات حتى ينتهي رسم أول إطار لمنع الـ blocking الأولي
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadExpenses();
+      // منح مساحة للمتصفح لإكمال تهيئة محرك الرسم بسلاسة
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) _loadExpenses();
+      });
     });
   }
 
