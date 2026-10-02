@@ -175,5 +175,16 @@
 
     <!-- المحرك المدمج النظيف لـ Flutter Web مع دعم WASM -->
     <script src="flutter_bootstrap.js" async></script>
+    <script>
+      window.addEventListener("flutter-first-frame", function () {
+        var meta = document.querySelector('meta[name="viewport"]');
+        if (meta) {
+          meta.setAttribute(
+            "content",
+            "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes",
+          );
+        }
+      });
+    </script>
   </body>
 </html>
