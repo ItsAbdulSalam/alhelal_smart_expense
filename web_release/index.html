@@ -47,6 +47,19 @@
     <!-- Preconnect to Google Fonts & WASM CDN for zero DNS latency -->
     <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
     <link rel="dns-prefetch" href="https://www.gstatic.com" />
+    <link
+      rel="preload"
+      href="https://www.gstatic.com/flutter-canvaskit/4c525dae247480a0aa2a59a7f3693fe548a8eb64/skwasm_heavy.wasm"
+      as="fetch"
+      type="application/wasm"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="https://www.gstatic.com/flutter-canvaskit/4c525dae247480a0aa2a59a7f3693fe548a8eb64/skwasm_heavy.js"
+      as="script"
+      crossorigin="anonymous"
+    />
 
     <style id="splash-screen-style">
       * {

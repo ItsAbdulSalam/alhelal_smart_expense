@@ -46,7 +46,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _repository = ExpenseRepository(Supabase.instance.client);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // منح مساحة للمتصفح لإكمال تهيئة محرك الرسم بسلاسة
       Future.delayed(const Duration(milliseconds: 150), () {
         if (mounted) _loadExpenses();
       });
