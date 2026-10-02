@@ -129,6 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final cacheBustedUrl =
           '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
 
+      // ignore: unused_local_variable
       final res = await _supabase.auth.updateUser(
         UserAttributes(
           data: {...?_user?.userMetadata, 'avatar_url': cacheBustedUrl},
