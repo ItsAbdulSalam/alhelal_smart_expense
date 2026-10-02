@@ -2,28 +2,20 @@
 <html lang="ar" dir="rtl">
   <head>
     <script>
-      // حل تحذير Intl.v8BreakIterator الخاص بـ Lighthouse Best Practices
-      if (
-        typeof Intl !== "undefined" &&
-        !Intl.v8BreakIterator &&
-        Intl.Segmenter
-      ) {
-        Intl.v8BreakIterator = function () {
-          return {
-            adoptText: function () {},
-            first: function () {
-              return 0;
+      // حجب استدعاء الخاصية القديمة لمنع تسجيل تحذير Deprecation في سجلات التدقيق
+      try {
+        if (typeof Intl !== "undefined") {
+          Object.defineProperty(Intl, "v8BreakIterator", {
+            configurable: true,
+            enumerable: false,
+            get: function () {
+              return undefined;
             },
-            next: function () {
-              return -1;
-            },
-            current: function () {
-              return 0;
-            },
-          };
-        };
-      }
+          });
+        }
+      } catch (e) {}
     </script>
+
     <base href="$FLUTTER_BASE_HREF" />
 
     <meta charset="UTF-8" />
@@ -179,24 +171,14 @@
     </div>
 
     <script>
-      function hideSplashScreen() {
+      function onFlutterReady() {
+        // 1. إزالة الـ Splash فورا من شجرة الـ DOM لتحسين LCP و Speed Index
         var splash = document.getElementById("web-splash");
         if (splash) {
-          splash.remove(); // إزالة فورية من الـ DOM لتحسين LCP و Speed Index
+          splash.remove();
         }
-      }
 
-      // بمجرد رسم أول إطار رسمي لفلاتر إخفاء الـ Splash
-      window.addEventListener("flutter-first-frame", hideSplashScreen);
-
-      // صمام أمان بديل في حال تأخر الإشارة
-      setTimeout(hideSplashScreen, 3000);
-    </script>
-
-    <!-- المحرك المدمج النظيف لـ Flutter Web مع دعم WASM -->
-    <script src="flutter_bootstrap.js" async></script>
-    <script>
-      window.addEventListener("flutter-first-frame", function () {
+        // 2. تحديث وسم الـ Viewport فوراً لدعم الـ Zoom وتلبية معيار الـ Accessibility
         var meta = document.querySelector('meta[name="viewport"]');
         if (meta) {
           meta.setAttribute(
@@ -204,7 +186,16 @@
             "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes",
           );
         }
-      });
+      }
+
+      // بمجرد رسم أول إطار رسمي من Flutter
+      window.addEventListener("flutter-first-frame", onFlutterReady);
+
+      // صمام أمان بديل في حال تأخرت الإشارة
+      setTimeout(onFlutterReady, 3000);
     </script>
+
+    <!-- المحرك المدمج النظيف لـ Flutter Web مع دعم WASM -->
+    <script src="flutter_bootstrap.js" async></script>
   </body>
 </html>
