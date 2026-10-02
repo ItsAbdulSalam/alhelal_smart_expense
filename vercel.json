@@ -1,7 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "outputDirectory": "web_release",
+  "cleanUrls": true,
   "rewrites": [
+    {
+      "source": "/assets/.env",
+      "destination": "/assets/.env"
+    },
     {
       "source": "/((?!.*\\.[\\w]+$).*)",
       "destination": "/index.html"
