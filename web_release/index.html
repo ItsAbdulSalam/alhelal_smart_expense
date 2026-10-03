@@ -207,5 +207,29 @@
 
     <!-- المحرك المدمج النظيف لـ Flutter Web مع دعم WASM وتجاوز كاش الإقلاع -->
     <script src="flutter_bootstrap.js?v=3" async></script>
+
+    <script>
+      // إلغاء وحذف الكاش القديم قسراً عند اكتشاف أي تحديث جديد
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker
+          .getRegistrations()
+          .then(function (registrations) {
+            for (let registration of registrations) {
+              registration.update();
+            }
+          });
+
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener(
+          "controllerchange",
+          function () {
+            if (!refreshing) {
+              refreshing = true;
+              window.location.reload();
+            }
+          },
+        );
+      }
+    </script>
   </body>
 </html>
