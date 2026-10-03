@@ -9,7 +9,7 @@
     },
     {
       "source": "/flutter.js.map",
-      "destination": "/ai-catalog.json"
+      "destination": "/favicon.png"
     },
     {
       "source": "/((?!.*\\.[\\w]+$).*)",

@@ -41,9 +41,6 @@
     <title>Alhelal Smart Expense</title>
     <link rel="manifest" href="manifest.json" />
 
-    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
-    <link rel="dns-prefetch" href="https://www.gstatic.com" />
-
     <style id="splash-screen-style">
       * {
         box-sizing: border-box;
@@ -68,7 +65,6 @@
         align-items: center;
         justify-content: center;
         background: radial-gradient(circle at center, #0a1738 0%, #030816 100%);
-        transition: opacity 0.15s ease-out;
       }
       .splash-card {
         display: flex;
@@ -158,46 +154,17 @@
     </div>
 
     <script>
-      function dismissSplash() {
+      function onFlutterReady() {
         var splash = document.getElementById("web-splash");
         if (splash) {
-          splash.style.opacity = "0";
-          setTimeout(function () {
-            if (splash.parentNode) splash.parentNode.removeChild(splash);
-          }, 150);
+          splash.remove();
         }
       }
-
-      window.addEventListener("flutter-first-frame", dismissSplash);
-      setTimeout(dismissSplash, 1800);
-
-      // فحص التحديثات في وقت فراغ المعالج (Zero TBT Impact)
-      function setupAutoUpdate() {
-        if (!("serviceWorker" in navigator)) return;
-
-        navigator.serviceWorker.ready.then(function (registration) {
-          registration.update();
-        });
-
-        var refreshing = false;
-        navigator.serviceWorker.addEventListener(
-          "controllerchange",
-          function () {
-            if (!refreshing) {
-              refreshing = true;
-              window.location.reload();
-            }
-          },
-        );
-      }
-
-      if ("requestIdleCallback" in window) {
-        window.requestIdleCallback(setupAutoUpdate);
-      } else {
-        setTimeout(setupAutoUpdate, 2000);
-      }
+      window.addEventListener("flutter-first-frame", onFlutterReady);
+      setTimeout(onFlutterReady, 3500);
     </script>
 
-    <script src="flutter_bootstrap.js" async></script>
+    <!-- استخدام استدعاء محرك فلاتر مع ختم النسخة لمنع كاش الإقلاع نهائياً -->
+    <script src="flutter_bootstrap.js?v=10" async></script>
   </body>
 </html>
