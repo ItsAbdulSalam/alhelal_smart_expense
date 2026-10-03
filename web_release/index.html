@@ -20,7 +20,10 @@
 
     <meta charset="UTF-8" />
     <meta content="IE=Edge" http-equiv="X-UA-Compatible" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes"
+    />
     <meta
       name="description"
       content="Alhelal Smart Expense - رفيقك المالي الذكي لإدارة وتحليل النفقات والفواتير بدقة متناهية عبر الذكاء الاصطناعي."
@@ -171,65 +174,35 @@
     </div>
 
     <script>
-      // 1. إدارة إزالة الـ Splash وشاشة البداية
       function onFlutterReady() {
         var splash = document.getElementById("web-splash");
         if (splash) {
           splash.remove();
         }
 
-        var meta = document.querySelector('meta[name="viewport"]');
-        if (meta) {
-          meta.setAttribute(
-            "content",
-            "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes",
+        // فحص وتحديث الـ Service Worker في الخلفية بهدوء فقط بعد أن يكتمل الإقلاع
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.ready.then(function (registration) {
+            registration.update();
+          });
+          var refreshing = false;
+          navigator.serviceWorker.addEventListener(
+            "controllerchange",
+            function () {
+              if (!refreshing) {
+                refreshing = true;
+                window.location.reload();
+              }
+            },
           );
         }
       }
 
       window.addEventListener("flutter-first-frame", onFlutterReady);
       setTimeout(onFlutterReady, 3000);
-
-      // 2. فحص وتطبيق تحديثات الـ Service Worker تلقائياً بدون تعليق الكاش
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.ready.then(function (registration) {
-          registration.update();
-        });
-
-        navigator.serviceWorker.addEventListener(
-          "controllerchange",
-          function () {
-            window.location.reload();
-          },
-        );
-      }
     </script>
 
-    <!-- المحرك المدمج النظيف لـ Flutter Web مع دعم WASM وتجاوز كاش الإقلاع -->
-    <script src="flutter_bootstrap.js?v=3" async></script>
-
-    <script>
-      // إلغاء وحذف الكاش القديم قسراً عند اكتشاف أي تحديث جديد
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker
-          .getRegistrations()
-          .then(function (registrations) {
-            for (let registration of registrations) {
-              registration.update();
-            }
-          });
-
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener(
-          "controllerchange",
-          function () {
-            if (!refreshing) {
-              refreshing = true;
-              window.location.reload();
-            }
-          },
-        );
-      }
-    </script>
+    <!-- المحرك المدمج النظيف لـ Flutter Web مع دعم WASM -->
+    <script src="flutter_bootstrap.js" async></script>
   </body>
 </html>
