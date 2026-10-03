@@ -4,6 +4,10 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/google8ca2fde6a6c4442a.html",
+      "destination": "/google8ca2fde6a6c4442a.html"
+    },
+    {
       "source": "/assets/.env",
       "destination": "/favicon.png"
     },
