@@ -41,6 +41,15 @@
     <title>Alhelal Smart Expense</title>
     <link rel="manifest" href="manifest.json" />
 
+    <!-- تنزيل فوري متوازي لمحرك WASM لتقليل وقت التجهيز على الموبايل -->
+    <link
+      rel="preload"
+      href="main.dart.wasm"
+      as="fetch"
+      type="application/wasm"
+      crossorigin
+    />
+
     <style id="splash-screen-style">
       * {
         box-sizing: border-box;
@@ -154,7 +163,6 @@
     </div>
 
     <script>
-      // منع flutter من فرض user-scalable=no ورفع Accessibility إلى 100
       var observer = new MutationObserver(function (mutations) {
         mutations.forEach(function (mutation) {
           mutation.addedNodes.forEach(function (node) {
@@ -182,9 +190,9 @@
         }
       }
       window.addEventListener("flutter-first-frame", onFlutterReady);
-      setTimeout(onFlutterReady, 1500);
+      setTimeout(onFlutterReady, 800);
     </script>
 
-    <script src="flutter_bootstrap.js?v=11" async></script>
+    <script src="flutter_bootstrap.js?v=12" async></script>
   </body>
 </html>
