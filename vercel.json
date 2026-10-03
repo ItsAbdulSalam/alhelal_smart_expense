@@ -8,6 +8,14 @@
       "destination": "/google8ca2fde6a6c4442a.html"
     },
     {
+      "source": "/sitemap.xml",
+      "destination": "/sitemap.xml"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/robots.txt"
+    },
+    {
       "source": "/assets/.env",
       "destination": "/favicon.png"
     },
