@@ -2,7 +2,7 @@
     <!-- صلاحيات الإنترنت والاتصال -->
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- 🌟 الصلاحيات الجديدة الخاصة بالماسح الضوئي والتقاط وفحص الإيصالات -->
+    <!-- الصلاحيات الخاصة بالماسح الضوئي والتقاط وفحص الإيصالات -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
@@ -11,7 +11,9 @@
     <application
         android:label="Alhelal Smart Expense"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:enableOnBackInvokedCallback="true">
+        
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -22,17 +24,23 @@
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
-              />
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
+        <!-- تفعيل معيار Flutter Embedding v2 الصريح لمنع أخطاء البناء -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- تعطيل Impeller لضمان ظهور الرسوم وسلاسة العرض على المحاكي -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
     </application>
     
     <queries>

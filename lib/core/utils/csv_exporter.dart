@@ -1,14 +1,12 @@
 import 'dart:convert';
-import 'dart:io';
-import 'dart:js_interop';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:web/web.dart' as web;
 import '../../data/models/expense_model.dart';
+import 'csv_saver_stub.dart'
+    if (dart.library.js_interop) 'csv_saver_web.dart'
+    if (dart.library.io) 'csv_saver_mobile.dart';
 
 class CsvExporter {
   static Future<void> exportExpenses(
@@ -29,13 +27,14 @@ class CsvExporter {
       'yyyy-MM-dd HH:mm',
     ).format(DateTime.now());
 
-    // -------------------------------------------------------------------------
-    // 1. طريقة الويب: تصميم HTML احترافي وفخم يفتح في إكسل كجدول منسق ومرتب 100%
-    // -------------------------------------------------------------------------
-    if (kIsWeb) {
-      final StringBuffer htmlBuffer = StringBuffer();
+    try {
+      // -------------------------------------------------------------------------
+      // 1. طريقة الويب: تصميم HTML احترافي وفخم يفتح في إكسل كجدول منسق 100%
+      // -------------------------------------------------------------------------
+      if (kIsWeb) {
+        final StringBuffer htmlBuffer = StringBuffer();
 
-      htmlBuffer.writeln('''
+        htmlBuffer.writeln('''
 <html xmlns:o="urn:schemas-microsoft-com:office:office" 
       xmlns:x="urn:schemas-microsoft-com:office:excel" 
       xmlns="http://www.w3.org/TR/REC-html40">
@@ -71,23 +70,23 @@ class CsvExporter {
     <tbody>
 ''');
 
-      for (int i = 0; i < expenses.length; i++) {
-        final exp = expenses[i];
-        final index = i + 1;
-        final date = DateFormat('yyyy-MM-dd').format(exp.expenseDate);
-        final title = exp.title;
-        final merchant =
-            (exp.merchantName != null && exp.merchantName!.isNotEmpty)
-            ? exp.merchantName!
-            : '—';
-        final category = exp.category;
-        final amount = exp.amount.toStringAsFixed(2);
-        final currency = exp.currency;
-        final notes = (exp.notes != null && exp.notes!.isNotEmpty)
-            ? exp.notes!
-            : '—';
+        for (int i = 0; i < expenses.length; i++) {
+          final exp = expenses[i];
+          final index = i + 1;
+          final date = DateFormat('yyyy-MM-dd').format(exp.expenseDate);
+          final title = exp.title;
+          final merchant =
+              (exp.merchantName != null && exp.merchantName!.isNotEmpty)
+              ? exp.merchantName!
+              : '—';
+          final category = exp.category;
+          final amount = exp.amount.toStringAsFixed(2);
+          final currency = exp.currency;
+          final notes = (exp.notes != null && exp.notes!.isNotEmpty)
+              ? exp.notes!
+              : '—';
 
-        htmlBuffer.writeln('''
+          htmlBuffer.writeln('''
       <tr>
         <td>$index</td>
         <td>$date</td>
@@ -99,9 +98,9 @@ class CsvExporter {
         <td style="text-align: right;">$notes</td>
       </tr>
 ''');
-      }
+        }
 
-      htmlBuffer.writeln('''
+        htmlBuffer.writeln('''
       <tr class="total-row">
         <td colspan="5" style="text-align: center;">المجموع الكلي للمصاريف</td>
         <td style="font-weight: 900; font-size: 15px;">${totalAmount.toStringAsFixed(2)}</td>
@@ -114,30 +113,16 @@ class CsvExporter {
 </html>
 ''');
 
-      final Uint8List bytes = utf8.encode(htmlBuffer.toString());
-      final filename =
-          'كشف_المصاريف_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.xls';
+        final Uint8List bytes = utf8.encode(htmlBuffer.toString());
+        final filename =
+            'كشف_المصاريف_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.xls';
 
-      // بديل متوافق مع WebAssembly (package:web) بدل universal_html القديمة
-      final blob = web.Blob(
-        [bytes.toJS].toJS,
-        web.BlobPropertyBag(type: 'application/vnd.ms-excel;charset=utf-8'),
-      );
-      final url = web.URL.createObjectURL(blob);
-      final anchor = web.document.createElement('a') as web.HTMLAnchorElement
-        ..href = url
-        ..download = filename
-        ..style.display = 'none';
-      web.document.body!.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      web.URL.revokeObjectURL(url);
-    }
-    // -------------------------------------------------------------------------
-    // 2. طريقة الموبايل: ملف CSV منظم ومضبوط للمشاركة
-    // -------------------------------------------------------------------------
-    else {
-      try {
+        await saveAndLaunchCsv(bytes, filename);
+      }
+      // -------------------------------------------------------------------------
+      // 2. طريقة الموبايل: ملف CSV منظم ومضبوط للمشاركة
+      // -------------------------------------------------------------------------
+      else {
         final List<List<dynamic>> rows = [];
         rows.add(['كشف المصاريف والنفقات المالية']);
         rows.add([
@@ -191,23 +176,13 @@ class CsvExporter {
         final String dateStr = DateFormat('yyyy_MM_dd').format(DateTime.now());
         final filename = 'Expense_Report_$dateStr.csv';
 
-        final directory = await getTemporaryDirectory();
-        final file = File('${directory.path}/$filename');
-        await file.writeAsBytes(bytes);
-
-        final xFile = XFile(file.path);
-        // ignore: deprecated_member_use
-        await Share.shareXFiles(
-          [xFile],
-          text: 'كشف المصاريف والنفقات المالية - Alhelal Smart Expense',
-          sharePositionOrigin: const Rect.fromLTWH(0, 0, 10, 10 / 2),
-        );
-      } catch (e) {
-        if (context != null && context.mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text('حدث خطأ أثناء التصدير: $e')));
-        }
+        await saveAndLaunchCsv(bytes, filename);
+      }
+    } catch (e) {
+      if (context != null && context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('حدث خطأ أثناء التصدير: $e')));
       }
     }
   }
