@@ -8,10 +8,6 @@
       "destination": "/favicon.png"
     },
     {
-      "source": "/flutter.js.map",
-      "destination": "/favicon.png"
-    },
-    {
       "source": "/((?!.*\\.[\\w]+$).*)",
       "destination": "/index.html"
     }

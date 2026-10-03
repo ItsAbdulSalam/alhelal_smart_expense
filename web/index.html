@@ -154,6 +154,27 @@
     </div>
 
     <script>
+      // منع flutter من فرض user-scalable=no ورفع Accessibility إلى 100
+      var observer = new MutationObserver(function (mutations) {
+        mutations.forEach(function (mutation) {
+          mutation.addedNodes.forEach(function (node) {
+            if (
+              node.nodeName === "META" &&
+              node.getAttribute("name") === "viewport"
+            ) {
+              var content = node.getAttribute("content") || "";
+              if (content.indexOf("user-scalable=no") !== -1) {
+                node.setAttribute(
+                  "content",
+                  "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes",
+                );
+              }
+            }
+          });
+        });
+      });
+      observer.observe(document.head, { childList: true });
+
       function onFlutterReady() {
         var splash = document.getElementById("web-splash");
         if (splash) {
@@ -161,10 +182,9 @@
         }
       }
       window.addEventListener("flutter-first-frame", onFlutterReady);
-      setTimeout(onFlutterReady, 3500);
+      setTimeout(onFlutterReady, 1500);
     </script>
 
-    <!-- استخدام استدعاء محرك فلاتر مع ختم النسخة لمنع كاش الإقلاع نهائياً -->
-    <script src="flutter_bootstrap.js?v=10" async></script>
+    <script src="flutter_bootstrap.js?v=11" async></script>
   </body>
 </html>
