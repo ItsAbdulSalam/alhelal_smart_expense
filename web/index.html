@@ -2,7 +2,6 @@
 <html lang="ar" dir="rtl">
   <head>
     <script>
-      // حجب استدعاء الخاصية القديمة لمنع تسجيل تحذير Deprecation في سجلات التدقيق
       try {
         if (typeof Intl !== "undefined") {
           Object.defineProperty(Intl, "v8BreakIterator", {
@@ -29,10 +28,7 @@
       content="Alhelal Smart Expense - رفيقك المالي الذكي لإدارة وتحليل النفقات والفواتير بدقة متناهية عبر الذكاء الاصطناعي."
     />
 
-    <!-- Theme Color for Browser Chrome -->
     <meta name="theme-color" content="#030816" />
-
-    <!-- iOS meta tags & icons -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta
       name="apple-mobile-web-app-status-bar-style"
@@ -40,14 +36,11 @@
     />
     <meta name="apple-mobile-web-app-title" content="Alhelal Smart Expense" />
     <link rel="apple-touch-icon" href="icons/Icon-192.png" />
-
-    <!-- Favicon -->
     <link rel="icon" type="image/png" href="favicon.png" />
 
     <title>Alhelal Smart Expense</title>
     <link rel="manifest" href="manifest.json" />
 
-    <!-- Preconnect to Google Fonts & WASM CDN for zero DNS latency -->
     <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
     <link rel="dns-prefetch" href="https://www.gstatic.com" />
 
@@ -55,7 +48,6 @@
       * {
         box-sizing: border-box;
       }
-
       html,
       body {
         margin: 0;
@@ -65,7 +57,6 @@
         background-color: #030816;
         overflow: hidden;
       }
-
       #web-splash {
         position: fixed;
         inset: 0;
@@ -77,9 +68,8 @@
         align-items: center;
         justify-content: center;
         background: radial-gradient(circle at center, #0a1738 0%, #030816 100%);
-        transition: opacity 0.3s ease-out;
+        transition: opacity 0.15s ease-out;
       }
-
       .splash-card {
         display: flex;
         flex-direction: column;
@@ -90,13 +80,11 @@
         background: rgba(255, 255, 255, 0.02);
         border: 1px solid rgba(255, 255, 255, 0.08);
       }
-
       .splash-logo {
         width: 96px;
         height: 96px;
         object-fit: contain;
       }
-
       .app-title {
         margin-top: 20px;
         font-family:
@@ -107,7 +95,6 @@
         font-weight: 700;
         color: #f1f5f9;
       }
-
       .app-subtitle {
         margin-top: 4px;
         font-family:
@@ -118,7 +105,6 @@
         color: #38bdf8;
         font-weight: 500;
       }
-
       .loading-bar {
         margin-top: 24px;
         width: 120px;
@@ -128,7 +114,6 @@
         position: relative;
         overflow: hidden;
       }
-
       .loading-progress {
         position: absolute;
         top: 0;
@@ -139,7 +124,6 @@
         border-radius: 3px;
         animation: loadStream 1.2s infinite linear;
       }
-
       @keyframes loadStream {
         0% {
           left: -40%;
@@ -174,35 +158,46 @@
     </div>
 
     <script>
-      function onFlutterReady() {
+      function dismissSplash() {
         var splash = document.getElementById("web-splash");
         if (splash) {
-          splash.remove();
-        }
-
-        // فحص وتحديث الـ Service Worker في الخلفية بهدوء فقط بعد أن يكتمل الإقلاع
-        if ("serviceWorker" in navigator) {
-          navigator.serviceWorker.ready.then(function (registration) {
-            registration.update();
-          });
-          var refreshing = false;
-          navigator.serviceWorker.addEventListener(
-            "controllerchange",
-            function () {
-              if (!refreshing) {
-                refreshing = true;
-                window.location.reload();
-              }
-            },
-          );
+          splash.style.opacity = "0";
+          setTimeout(function () {
+            if (splash.parentNode) splash.parentNode.removeChild(splash);
+          }, 150);
         }
       }
 
-      window.addEventListener("flutter-first-frame", onFlutterReady);
-      setTimeout(onFlutterReady, 3000);
+      window.addEventListener("flutter-first-frame", dismissSplash);
+      setTimeout(dismissSplash, 1800);
+
+      // فحص التحديثات في وقت فراغ المعالج (Zero TBT Impact)
+      function setupAutoUpdate() {
+        if (!("serviceWorker" in navigator)) return;
+
+        navigator.serviceWorker.ready.then(function (registration) {
+          registration.update();
+        });
+
+        var refreshing = false;
+        navigator.serviceWorker.addEventListener(
+          "controllerchange",
+          function () {
+            if (!refreshing) {
+              refreshing = true;
+              window.location.reload();
+            }
+          },
+        );
+      }
+
+      if ("requestIdleCallback" in window) {
+        window.requestIdleCallback(setupAutoUpdate);
+      } else {
+        setTimeout(setupAutoUpdate, 2000);
+      }
     </script>
 
-    <!-- المحرك المدمج النظيف لـ Flutter Web مع دعم WASM -->
     <script src="flutter_bootstrap.js" async></script>
   </body>
 </html>
