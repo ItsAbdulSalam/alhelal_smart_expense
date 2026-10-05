@@ -66,6 +66,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  Future<void> _openAddExpense() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AddExpenseScreen()),
+    );
+    if (result == true) _loadExpenses();
+  }
+
   void _recomputeMetrics(List<ExpenseModel> allExpenses) {
     _cachedAllExpenses = allExpenses;
     _cachedFilteredExpenses = _filterExpenses(allExpenses);
@@ -243,12 +251,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             const Icon(Icons.tune_rounded, color: Color(0xFF4F46E5)),
             const SizedBox(width: 8),
-            Text(
-              localizations.monthlyBudget,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: textColor,
+            Expanded(
+              child: Text(
+                localizations.monthlyBudget,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
               ),
             ),
           ],
@@ -346,6 +357,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Color subTextColor,
     Color borderColor,
   ) {
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+
     String? fullImageUrl;
     if (expense.receiptImagePath != null &&
         expense.receiptImagePath!.isNotEmpty) {
@@ -363,9 +376,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Directionality(
-        textDirection: ui.TextDirection.rtl,
+        textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
         child: Container(
-          padding: const EdgeInsets.all(24),
+          width: double.infinity,
+          padding: EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            24 + MediaQuery.paddingOf(ctx).bottom,
+          ),
           decoration: BoxDecoration(
             color: cardBg,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -402,6 +421,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       '${expense.amount.toStringAsFixed(2)} ${expense.currency}',
                       style: TextStyle(
@@ -423,7 +443,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Divider(height: 28, color: borderColor),
                 _buildDetailRow(
                   Icons.calendar_month_rounded,
-                  'تاريخ الفاتورة',
+                  isArabic ? 'تاريخ الفاتورة' : 'Bill date',
                   DateFormat('yyyy-MM-dd').format(expense.expenseDate),
                   subTextColor,
                   textColor,
@@ -431,7 +451,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 10),
                 _buildDetailRow(
                   _getCategoryIcon(expense.category),
-                  'التصنيف',
+                  isArabic ? 'التصنيف' : 'Category',
                   _getTranslatedCategory(context, expense.category),
                   subTextColor,
                   textColor,
@@ -440,7 +460,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 10),
                   _buildDetailRow(
                     Icons.note_alt_outlined,
-                    'ملاحظات',
+                    isArabic ? 'ملاحظات' : 'Notes',
                     expense.notes!,
                     subTextColor,
                     textColor,
@@ -480,13 +500,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Icon(icon, size: 18, color: subTextColor),
         const SizedBox(width: 8),
         Text(label, style: TextStyle(color: subTextColor, fontSize: 13)),
-        const Spacer(),
-        Text(
-          value,
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 13,
-            color: textColor,
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: textColor,
+            ),
           ),
         ),
       ],
@@ -547,26 +570,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: stateColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: stateColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(statusIcon, color: stateColor, size: 18),
                     ),
-                    child: Icon(statusIcon, color: stateColor, size: 18),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    localizations.monthlyBudget,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      color: textColor,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        localizations.monthlyBudget,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: textColor,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               InkWell(
                 onTap: () => _showSetBudgetDialog(
@@ -620,6 +648,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${percentage.toStringAsFixed(0)}%',
                 style: TextStyle(
@@ -646,9 +675,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ) {
     final localizations = AppLocalizations.of(context)!;
     final entries = categoryTotals.entries.toList();
+    final narrow = MediaQuery.sizeOf(context).width < 600;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+      padding: EdgeInsets.symmetric(horizontal: narrow ? 16 : 24, vertical: 22),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(18),
@@ -660,24 +690,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.pie_chart_rounded,
-                    color: Color(0xFF4F46E5),
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    localizations.expenseDistribution,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: textColor,
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.pie_chart_rounded,
+                      color: Color(0xFF4F46E5),
+                      size: 18,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        localizations.expenseDistribution,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${entries.length} ${localizations.sectionsCount}',
                 style: TextStyle(
@@ -783,6 +819,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Expanded(
                           child: Text(
                             entry.key,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -929,69 +967,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: timeFilters.map((tf) {
-                final isSelected = _selectedTimeFilter == tf;
-                return Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: InkWell(
-                    onTap: () async {
-                      if (tf == localizations.customPeriod) {
-                        final picked = await showDateRangePicker(
-                          context: context,
-                          firstDate: DateTime(2022),
-                          lastDate: DateTime(2030),
-                        );
-                        if (picked != null) {
-                          setState(() {
-                            _selectedTimeFilter = tf;
-                            _customDateRange = picked;
-                            if (_cachedAllExpenses != null) {
-                              _recomputeMetrics(_cachedAllExpenses!);
-                            }
-                          });
+          // Wrap بدل التمرير الأفقي: لا يقص العناصر على الشاشات الصغيرة
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: timeFilters.map((tf) {
+              final isSelected = _selectedTimeFilter == tf;
+              return InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () async {
+                  if (tf == localizations.customPeriod) {
+                    final picked = await showDateRangePicker(
+                      context: context,
+                      firstDate: DateTime(2022),
+                      lastDate: DateTime(2030),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _selectedTimeFilter = tf;
+                        _customDateRange = picked;
+                        if (_cachedAllExpenses != null) {
+                          _recomputeMetrics(_cachedAllExpenses!);
                         }
-                      } else {
-                        setState(() {
-                          _selectedTimeFilter = tf;
-                          if (_cachedAllExpenses != null) {
-                            _recomputeMetrics(_cachedAllExpenses!);
-                          }
-                        });
+                      });
+                    }
+                  } else {
+                    setState(() {
+                      _selectedTimeFilter = tf;
+                      if (_cachedAllExpenses != null) {
+                        _recomputeMetrics(_cachedAllExpenses!);
                       }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? (isDark
-                                  ? const Color(0xFF38BDF8)
-                                  : const Color(0xFF1E293B))
-                            : (isDark
-                                  ? const Color(0xFF1E293B)
-                                  : const Color(0xFFF1F5F9)),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        tf,
-                        style: TextStyle(
-                          color: isSelected
-                              ? (isDark ? Colors.black : Colors.white)
-                              : subTextColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
+                    });
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? (isDark
+                              ? const Color(0xFF38BDF8)
+                              : const Color(0xFF1E293B))
+                        : (isDark
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFF1F5F9)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    tf,
+                    style: TextStyle(
+                      color: isSelected
+                          ? (isDark ? Colors.black : Colors.white)
+                          : subTextColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
                     ),
                   ),
-                );
-              }).toList(),
-            ),
+                ),
+              );
+            }).toList(),
           ),
           Divider(height: 22, color: borderColor),
           Wrap(
@@ -1000,6 +1036,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: categories.map((cat) {
               final isSelected = _selectedCategory == cat;
               return InkWell(
+                borderRadius: BorderRadius.circular(10),
                 onTap: () {
                   setState(() {
                     _selectedCategory = cat;
@@ -1048,12 +1085,395 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Future<void> _confirmLogout(
+    Color cardBg,
+    Color borderColor,
+    Color textColor,
+    Color subTextColor,
+  ) async {
+    final localizations = AppLocalizations.of(context)!;
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: cardBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(color: borderColor),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.logout_rounded, color: Color(0xFFEF4444)),
+            const SizedBox(width: 8),
+            Text(localizations.logout, style: TextStyle(color: textColor)),
+          ],
+        ),
+        content: Text(
+          isArabic
+              ? 'هل أنت متأكد أنك تريد تسجيل الخروج من التطبيق؟'
+              : 'Are you sure you want to log out of the app?',
+          style: TextStyle(color: subTextColor),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              localizations.cancel,
+              style: TextStyle(color: subTextColor),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(localizations.logout),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogout == true) {
+      await Supabase.instance.client.auth.signOut();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AuthScreen()),
+        (route) => false,
+      );
+    }
+  }
+
+  /// أزرار الشريط العلوي للموبايل: الأفاتار + قائمة واحدة تجمع كل الإجراءات
+  List<Widget> _buildMobileActions(
+    bool isArabic,
+    Color cardBg,
+    Color borderColor,
+    Color textColor,
+    Color subTextColor,
+  ) {
+    final localizations = AppLocalizations.of(context)!;
+
+    return [
+      const DashboardUserAvatarButton(),
+      PopupMenuButton<String>(
+        icon: Icon(Icons.more_vert_rounded, color: textColor),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        onSelected: (v) {
+          switch (v) {
+            case 'lang':
+              LocaleController.setLocale(Locale(isArabic ? 'en' : 'ar'));
+              break;
+            case 'pdf_download':
+              _handlePdfExport(isDirectDownload: true);
+              break;
+            case 'pdf_print':
+              _handlePdfExport(isDirectDownload: false);
+              break;
+            case 'excel':
+              if (_cachedFilteredExpenses.isNotEmpty) {
+                CsvExporter.exportExpenses(_cachedFilteredExpenses);
+              }
+              break;
+            case 'refresh':
+              _loadExpenses();
+              break;
+            case 'logout':
+              _confirmLogout(cardBg, borderColor, textColor, subTextColor);
+              break;
+          }
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: 'lang',
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.language_rounded,
+                  size: 18,
+                  color: Color(0xFF4F46E5),
+                ),
+                const SizedBox(width: 10),
+                Text(isArabic ? 'English' : 'العربية'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'pdf_download',
+            child: Row(
+              children: [
+                Icon(
+                  Icons.picture_as_pdf_rounded,
+                  size: 18,
+                  color: Color(0xFFEF4444),
+                ),
+                SizedBox(width: 10),
+                Text('Download PDF'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'pdf_print',
+            child: Row(
+              children: [
+                Icon(Icons.print_rounded, size: 18),
+                SizedBox(width: 10),
+                Text('Print Report'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'excel',
+            child: Row(
+              children: [
+                Icon(
+                  Icons.file_download_rounded,
+                  size: 18,
+                  color: Color(0xFF10B981),
+                ),
+                SizedBox(width: 10),
+                Text('Export Excel'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'refresh',
+            child: Row(
+              children: [
+                const Icon(Icons.refresh_rounded, size: 18),
+                const SizedBox(width: 10),
+                Text(isArabic ? 'تحديث' : 'Refresh'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'logout',
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.logout_rounded,
+                  size: 18,
+                  color: Color(0xFFEF4444),
+                ),
+                const SizedBox(width: 10),
+                Text(localizations.logout),
+              ],
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(width: 4),
+    ];
+  }
+
+  /// أزرار الشريط العلوي للتابلت والويب (كما كانت)
+  List<Widget> _buildWideActions(
+    bool isArabic,
+    Color cardBg,
+    Color borderColor,
+    Color textColor,
+    Color subTextColor,
+  ) {
+    final localizations = AppLocalizations.of(context)!;
+
+    return [
+      PopupMenuButton<Locale>(
+        tooltip: 'Change Language',
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        onSelected: (loc) => LocaleController.setLocale(loc),
+        itemBuilder: (context) {
+          final currentLocale = Localizations.localeOf(context).languageCode;
+          return [
+            PopupMenuItem(
+              value: const Locale('ar'),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'العربية',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  if (currentLocale == 'ar')
+                    const Icon(
+                      Icons.check_rounded,
+                      color: Color(0xFF4F46E5),
+                      size: 18,
+                    ),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: const Locale('en'),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'English',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  if (currentLocale == 'en')
+                    const Icon(
+                      Icons.check_rounded,
+                      color: Color(0xFF4F46E5),
+                      size: 18,
+                    ),
+                ],
+              ),
+            ),
+          ];
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF4F46E5).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF4F46E5).withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.language_rounded,
+                size: 16,
+                color: Color(0xFF4F46E5),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                isArabic ? 'عربي' : 'EN',
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF4F46E5),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      const SizedBox(width: 4),
+      PopupMenuButton<String>(
+        tooltip: 'Export Options',
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        onSelected: (val) async {
+          if (val == 'pdf_download') {
+            _handlePdfExport(isDirectDownload: true);
+          } else if (val == 'pdf_print') {
+            _handlePdfExport(isDirectDownload: false);
+          } else if (val == 'excel') {
+            if (_cachedFilteredExpenses.isNotEmpty) {
+              CsvExporter.exportExpenses(_cachedFilteredExpenses);
+            }
+          }
+        },
+        itemBuilder: (ctx) => const [
+          PopupMenuItem(
+            value: 'pdf_download',
+            child: Row(
+              children: [
+                Icon(
+                  Icons.picture_as_pdf_rounded,
+                  color: Color(0xFFEF4444),
+                  size: 18,
+                ),
+                SizedBox(width: 10),
+                Text('Download PDF'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'pdf_print',
+            child: Row(
+              children: [
+                Icon(Icons.print_rounded, color: Color(0xFF0F172A), size: 18),
+                SizedBox(width: 10),
+                Text('Print Report'),
+              ],
+            ),
+          ),
+          PopupMenuItem(
+            value: 'excel',
+            child: Row(
+              children: [
+                Icon(
+                  Icons.file_download_rounded,
+                  color: Color(0xFF10B981),
+                  size: 18,
+                ),
+                SizedBox(width: 10),
+                Text('Export Excel'),
+              ],
+            ),
+          ),
+        ],
+        child: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: borderColor),
+          ),
+          child: const Icon(
+            Icons.folder_shared_rounded,
+            size: 18,
+            color: Color(0xFF4F46E5),
+          ),
+        ),
+      ),
+      const SizedBox(width: 4),
+      IconButton(
+        tooltip: 'Refresh',
+        constraints: const BoxConstraints(),
+        padding: const EdgeInsets.all(6),
+        icon: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: borderColor),
+          ),
+          child: Icon(Icons.refresh_rounded, size: 18, color: subTextColor),
+        ),
+        onPressed: _loadExpenses,
+      ),
+      const SizedBox(width: 4),
+      const DashboardUserAvatarButton(),
+      const SizedBox(width: 4),
+      IconButton(
+        tooltip: localizations.logout,
+        constraints: const BoxConstraints(),
+        padding: const EdgeInsets.all(6),
+        icon: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: borderColor),
+          ),
+          child: const Icon(
+            Icons.logout_rounded,
+            size: 18,
+            color: Color(0xFFEF4444),
+          ),
+        ),
+        onPressed: () =>
+            _confirmLogout(cardBg, borderColor, textColor, subTextColor),
+      ),
+      const SizedBox(width: 8),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final localizations = AppLocalizations.of(context)!;
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
-    final screenWidth = MediaQuery.of(context).size.width;
+    final screenWidth = MediaQuery.sizeOf(context).width;
     final isDesktop = screenWidth > 900;
+    final isMobile = screenWidth < 600;
 
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -1080,6 +1500,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: Colors.transparent,
         scrolledUnderElevation: 0,
         centerTitle: false,
+        titleSpacing: 12,
         title: Row(
           children: [
             const Icon(
@@ -1101,378 +1522,139 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
-        actions: [
-          PopupMenuButton<Locale>(
-            tooltip: 'Change Language',
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            onSelected: (loc) => LocaleController.setLocale(loc),
-            itemBuilder: (context) {
-              final currentLocale = Localizations.localeOf(
-                context,
-              ).languageCode;
-              return [
-                PopupMenuItem(
-                  value: const Locale('ar'),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'العربية',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      if (currentLocale == 'ar')
-                        const Icon(
-                          Icons.check_rounded,
-                          color: Color(0xFF4F46E5),
-                          size: 18,
-                        ),
-                    ],
-                  ),
-                ),
-                PopupMenuItem(
-                  value: const Locale('en'),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'English',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      if (currentLocale == 'en')
-                        const Icon(
-                          Icons.check_rounded,
-                          color: Color(0xFF4F46E5),
-                          size: 18,
-                        ),
-                    ],
-                  ),
-                ),
-              ];
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFF4F46E5).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: const Color(0xFF4F46E5).withValues(alpha: 0.3),
-                  width: 1.5,
-                ),
+        actions: isMobile
+            ? _buildMobileActions(
+                isArabic,
+                cardBg,
+                borderColor,
+                textColor,
+                subTextColor,
+              )
+            : _buildWideActions(
+                isArabic,
+                cardBg,
+                borderColor,
+                textColor,
+                subTextColor,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.language_rounded,
-                    size: 16,
-                    color: Color(0xFF4F46E5),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    isArabic ? 'عربي' : 'EN',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF4F46E5),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          PopupMenuButton<String>(
-            tooltip: 'Export Options',
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-            onSelected: (val) async {
-              if (val == 'pdf_download') {
-                _handlePdfExport(isDirectDownload: true);
-              } else if (val == 'pdf_print') {
-                _handlePdfExport(isDirectDownload: false);
-              } else if (val == 'excel') {
-                if (_cachedFilteredExpenses.isNotEmpty) {
-                  CsvExporter.exportExpenses(_cachedFilteredExpenses);
-                }
-              }
-            },
-            itemBuilder: (ctx) => const [
-              PopupMenuItem(
-                value: 'pdf_download',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.picture_as_pdf_rounded,
-                      color: Color(0xFFEF4444),
-                      size: 18,
-                    ),
-                    SizedBox(width: 10),
-                    Text('Download PDF'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'pdf_print',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.print_rounded,
-                      color: Color(0xFF0F172A),
-                      size: 18,
-                    ),
-                    SizedBox(width: 10),
-                    Text('Print Report'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'excel',
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.file_download_rounded,
-                      color: Color(0xFF10B981),
-                      size: 18,
-                    ),
-                    SizedBox(width: 10),
-                    Text('Export Excel'),
-                  ],
-                ),
-              ),
-            ],
-            child: Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: borderColor),
-              ),
-              child: const Icon(
-                Icons.folder_shared_rounded,
-                size: 18,
-                color: Color(0xFF4F46E5),
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            tooltip: 'Refresh',
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(6),
-            icon: Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: borderColor),
-              ),
-              child: Icon(Icons.refresh_rounded, size: 18, color: subTextColor),
-            ),
-            onPressed: _loadExpenses,
-          ),
-          const SizedBox(width: 4),
-          // زر البروفايل التفاعلي الجديد بالصورة الحقيقية
-          const DashboardUserAvatarButton(),
-          const SizedBox(width: 4),
-          IconButton(
-            tooltip: localizations.logout,
-            constraints: const BoxConstraints(),
-            padding: const EdgeInsets.all(6),
-            icon: Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: borderColor),
-              ),
-              child: const Icon(
-                Icons.logout_rounded,
-                size: 18,
-                color: Color(0xFFEF4444),
-              ),
-            ),
-            onPressed: () async {
-              final shouldLogout = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  backgroundColor: cardBg,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                    side: BorderSide(color: borderColor),
-                  ),
-                  title: Row(
-                    children: [
-                      const Icon(
-                        Icons.logout_rounded,
-                        color: Color(0xFFEF4444),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        localizations.logout,
-                        style: TextStyle(color: textColor),
-                      ),
-                    ],
-                  ),
-                  content: Text(
-                    isArabic
-                        ? 'هل أنت متأكد أنك تريد تسجيل الخروج من التطبيق؟'
-                        : 'Are you sure you want to log out of the app?',
-                    style: TextStyle(color: subTextColor),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: Text(
-                        localizations.cancel,
-                        style: TextStyle(color: subTextColor),
-                      ),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFEF4444),
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                      ),
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: Text(localizations.logout),
-                    ),
-                  ],
-                ),
-              );
-              if (shouldLogout == true) {
-                await Supabase.instance.client.auth.signOut();
-                if (mounted) {
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (context) => const AuthScreen()),
-                    (route) => false,
-                  );
-                }
-              }
-            },
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: isDesktop ? double.infinity : screenWidth,
-          ),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: isDesktop ? 24.0 : 12.0),
-            child: FutureBuilder<List<ExpenseModel>>(
-              future: _expensesFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF4F46E5)),
-                  );
-                }
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: isDesktop ? 1100.0 : screenWidth,
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isDesktop ? 24.0 : 12.0,
+              ),
+              child: FutureBuilder<List<ExpenseModel>>(
+                future: _expensesFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF4F46E5),
+                      ),
+                    );
+                  }
 
-                final allExpenses = snapshot.data ?? [];
-                // حساب المصفوفات مرة واحدة فقط عند وصول بيانات جديدة
-                if (_cachedAllExpenses != allExpenses) {
-                  _recomputeMetrics(allExpenses);
-                }
+                  final allExpenses = snapshot.data ?? [];
+                  // حساب المصفوفات مرة واحدة فقط عند وصول بيانات جديدة
+                  if (_cachedAllExpenses != allExpenses) {
+                    _recomputeMetrics(allExpenses);
+                  }
 
-                final filteredExpenses = _cachedFilteredExpenses;
-                final totalAmount = _cachedTotalAmount;
-                final categoryTotals = _cachedCategoryTotals;
+                  final filteredExpenses = _cachedFilteredExpenses;
+                  final totalAmount = _cachedTotalAmount;
+                  final categoryTotals = _cachedCategoryTotals;
 
-                // استخدام ListView.builder / Slivers بدلاً من ListView العادي لتوفير الذاكرة وسرعة المعالجة
-                return CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(24),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(20),
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFF1E1B4B),
-                                    Color(0xFF312E81),
-                                    Color(0xFF4338CA),
+                  return CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          child: Column(
+                            children: [
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(20),
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF1E1B4B),
+                                      Color(0xFF312E81),
+                                      Color(0xFF4338CA),
+                                    ],
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            '${localizations.totalExpenses} ($_selectedTimeFilter)',
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          isArabic
+                                              ? '${filteredExpenses.length} من أصل ${allExpenses.length} فواتير'
+                                              : '${filteredExpenses.length} of ${allExpenses.length} bills',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.baseline,
+                                      textBaseline: TextBaseline.alphabetic,
+                                      children: [
+                                        Flexible(
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: AlignmentDirectional
+                                                .centerStart,
+                                            child: Text(
+                                              totalAmount.toStringAsFixed(2),
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 34,
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'TRY',
+                                          style: TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        '${localizations.totalExpenses} ($_selectedTimeFilter)',
-                                        style: const TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      Text(
-                                        isArabic
-                                            ? '${filteredExpenses.length} من أصل ${allExpenses.length} فواتير'
-                                            : '${filteredExpenses.length} of ${allExpenses.length} bills',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        totalAmount.toStringAsFixed(2),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 34,
-                                          fontWeight: FontWeight.w900,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      const Text(
-                                        'TRY',
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            _buildBudgetCard(
-                              totalAmount,
-                              isDark,
-                              cardBg,
-                              borderColor,
-                              textColor,
-                              subTextColor,
-                            ),
-                            const SizedBox(height: 16),
-                            _buildFilterAndSearchBar(
-                              isDark,
-                              cardBg,
-                              borderColor,
-                              textColor,
-                              subTextColor,
-                            ),
-                            const SizedBox(height: 18),
-                            if (categoryTotals.isNotEmpty) ...[
-                              _buildInteractiveChart(
-                                categoryTotals,
+                              const SizedBox(height: 16),
+                              _buildBudgetCard(
                                 totalAmount,
                                 isDark,
                                 cardBg,
@@ -1480,307 +1662,354 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 textColor,
                                 subTextColor,
                               ),
-                              const SizedBox(height: 22),
-                            ],
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  '${localizations.transactions} (${filteredExpenses.length})',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w800,
-                                    color: textColor,
-                                  ),
+                              const SizedBox(height: 16),
+                              _buildFilterAndSearchBar(
+                                isDark,
+                                cardBg,
+                                borderColor,
+                                textColor,
+                                subTextColor,
+                              ),
+                              const SizedBox(height: 18),
+                              if (categoryTotals.isNotEmpty) ...[
+                                _buildInteractiveChart(
+                                  categoryTotals,
+                                  totalAmount,
+                                  isDark,
+                                  cardBg,
+                                  borderColor,
+                                  textColor,
+                                  subTextColor,
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: cardBg,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: borderColor),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.swipe_left_rounded,
-                                        size: 13,
-                                        color: subTextColor,
+                                const SizedBox(height: 22),
+                              ],
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${localizations.transactions} (${filteredExpenses.length})',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        color: textColor,
                                       ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        localizations.swipeToDelete,
-                                        style: TextStyle(
-                                          fontSize: 11,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: cardBg,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: borderColor),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.swipe_left_rounded,
+                                          size: 13,
                                           color: subTextColor,
-                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          localizations.swipeToDelete,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: subTextColor,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // رسم العناصر بطريقة كسولة توفر الذاكرة وزمن المعالجة
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          final expense = filteredExpenses[index];
+                          final categoryColor = _getCategoryColor(
+                            expense.category,
+                          );
+                          final hasImage =
+                              expense.receiptImagePath != null &&
+                              expense.receiptImagePath!.isNotEmpty;
+                          final translatedCategory = _getTranslatedCategory(
+                            context,
+                            expense.category,
+                          );
+
+                          return Dismissible(
+                            key: ValueKey(expense.id),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEF4444),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: Colors.white,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    localizations.delete,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            confirmDismiss: (direction) async {
+                              return await showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  backgroundColor: cardBg,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(18),
+                                    side: BorderSide(color: borderColor),
+                                  ),
+                                  title: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: Colors.redAccent,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        isArabic
+                                            ? 'تأكيد الحذف'
+                                            : 'Confirm Delete',
+                                        style: TextStyle(color: textColor),
+                                      ),
+                                    ],
+                                  ),
+                                  content: Text(
+                                    isArabic
+                                        ? 'هل تريد حذف فاتورة "${expense.title}" نهائياً؟'
+                                        : 'Do you want to delete "${expense.title}" permanently?',
+                                    style: TextStyle(color: subTextColor),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(ctx, false),
+                                      child: Text(
+                                        localizations.cancel,
+                                        style: TextStyle(color: subTextColor),
+                                      ),
+                                    ),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.redAccent,
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                      ),
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      child: Text(localizations.delete),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                            onDismissed: (_) async {
+                              await _repository.deleteExpense(expense.id);
+                              _loadExpenses();
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: borderColor),
+                              ),
+                              child: Material(
+                                color: cardBg,
+                                borderRadius: BorderRadius.circular(16),
+                                child: ListTile(
+                                  onTap: () => _showExpenseDetails(
+                                    expense,
+                                    isDark,
+                                    cardBg,
+                                    textColor,
+                                    subTextColor,
+                                    borderColor,
+                                  ),
+                                  contentPadding: EdgeInsets.symmetric(
+                                    horizontal: isMobile ? 12 : 18,
+                                    vertical: 10,
+                                  ),
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: categoryColor.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(
+                                      _getCategoryIcon(expense.category),
+                                      color: categoryColor,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    expense.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14.5,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (expense.merchantName != null &&
+                                          expense.merchantName!.isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 2,
+                                          ),
+                                          child: Text(
+                                            expense.merchantName!,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: subTextColor,
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '$translatedCategory • ${DateFormat('yyyy-MM-dd').format(expense.expenseDate)}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: subTextColor.withValues(
+                                            alpha: 0.8,
+                                          ),
+                                          fontSize: 11.5,
                                         ),
                                       ),
                                     ],
                                   ),
+                                  trailing: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '${expense.amount.toStringAsFixed(2)} ${expense.currency}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 15,
+                                          color: textColor,
+                                        ),
+                                      ),
+                                      if (hasImage)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 3,
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.image_outlined,
+                                                size: 12,
+                                                color: Color(0xFF4F46E5),
+                                              ),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                isArabic
+                                                    ? 'مرفق صورة'
+                                                    : 'Attached',
+                                                style: const TextStyle(
+                                                  fontSize: 10.5,
+                                                  color: Color(0xFF4F46E5),
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
                                 ),
-                              ],
+                              ),
                             ),
-                          ],
+                          );
+                        }, childCount: filteredExpenses.length),
+                      ),
+                      // مسافة سفلية كافية حتى لا يغطي زر الإضافة آخر عنصر
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: MediaQuery.paddingOf(context).bottom + 96,
                         ),
                       ),
-                    ),
-                    // رسم العناصر بطريقة كسولة توفر الذاكرة وزمن المعالجة
-                    SliverList(
-                      delegate: SliverChildBuilderDelegate((context, index) {
-                        final expense = filteredExpenses[index];
-                        final categoryColor = _getCategoryColor(
-                          expense.category,
-                        );
-                        final hasImage =
-                            expense.receiptImagePath != null &&
-                            expense.receiptImagePath!.isNotEmpty;
-                        final translatedCategory = _getTranslatedCategory(
-                          context,
-                          expense.category,
-                        );
-
-                        return Dismissible(
-                          key: ValueKey(expense.id),
-                          direction: DismissDirection.endToStart,
-                          background: Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEF4444),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            alignment: Alignment.centerLeft,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.delete_outline_rounded,
-                                  color: Colors.white,
-                                  size: 22,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  localizations.delete,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          confirmDismiss: (direction) async {
-                            return await showDialog(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                backgroundColor: cardBg,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                  side: BorderSide(color: borderColor),
-                                ),
-                                title: Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.warning_amber_rounded,
-                                      color: Colors.redAccent,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      isArabic
-                                          ? 'تأكيد الحذف'
-                                          : 'Confirm Delete',
-                                      style: TextStyle(color: textColor),
-                                    ),
-                                  ],
-                                ),
-                                content: Text(
-                                  isArabic
-                                      ? 'هل تريد حذف فاتورة "${expense.title}" نهائياً؟'
-                                      : 'Do you want to delete "${expense.title}" permanently?',
-                                  style: TextStyle(color: subTextColor),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx, false),
-                                    child: Text(
-                                      localizations.cancel,
-                                      style: TextStyle(color: subTextColor),
-                                    ),
-                                  ),
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.redAccent,
-                                      foregroundColor: Colors.white,
-                                      elevation: 0,
-                                    ),
-                                    onPressed: () => Navigator.pop(ctx, true),
-                                    child: Text(localizations.delete),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                          onDismissed: (_) async {
-                            await _repository.deleteExpense(expense.id);
-                            _loadExpenses();
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: borderColor),
-                            ),
-                            child: Material(
-                              color: cardBg,
-                              borderRadius: BorderRadius.circular(16),
-                              child: ListTile(
-                                onTap: () => _showExpenseDetails(
-                                  expense,
-                                  isDark,
-                                  cardBg,
-                                  textColor,
-                                  subTextColor,
-                                  borderColor,
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 18,
-                                  vertical: 10,
-                                ),
-                                leading: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: categoryColor.withValues(
-                                      alpha: 0.12,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    _getCategoryIcon(expense.category),
-                                    color: categoryColor,
-                                    size: 20,
-                                  ),
-                                ),
-                                title: Text(
-                                  expense.title,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14.5,
-                                    color: textColor, // تباين قوي بدون بهتان
-                                  ),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (expense.merchantName != null &&
-                                        expense.merchantName!.isNotEmpty)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 2),
-                                        child: Text(
-                                          expense.merchantName!,
-                                          style: TextStyle(
-                                            color:
-                                                subTextColor, // رمادي متزن مقروء
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '$translatedCategory • ${DateFormat('yyyy-MM-dd').format(expense.expenseDate)}',
-                                      style: TextStyle(
-                                        color: subTextColor.withValues(
-                                          alpha: 0.8,
-                                        ),
-                                        fontSize: 11.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          '${expense.amount.toStringAsFixed(2)} ${expense.currency}',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 15,
-                                            color: textColor,
-                                          ),
-                                        ),
-                                        if (hasImage)
-                                          Padding(
-                                            padding: const EdgeInsets.only(
-                                              top: 3,
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const Icon(
-                                                  Icons.image_outlined,
-                                                  size: 12,
-                                                  color: Color(0xFF4F46E5),
-                                                ),
-                                                const SizedBox(width: 3),
-                                                Text(
-                                                  isArabic
-                                                      ? 'مرفق صورة'
-                                                      : 'Attached',
-                                                  style: const TextStyle(
-                                                    fontSize: 10.5,
-                                                    color: Color(0xFF4F46E5),
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      }, childCount: filteredExpenses.length),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                  ],
-                );
-              },
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF4F46E5),
-        foregroundColor: Colors.white,
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AddExpenseScreen()),
-          );
-          if (result == true) _loadExpenses();
-        },
-        icon: const Icon(Icons.add_a_photo_rounded, size: 18),
-        label: Text(
-          localizations.newExpense,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-        ),
-      ),
+      floatingActionButton: isMobile
+          ? FloatingActionButton(
+              tooltip: localizations.newExpense,
+              backgroundColor: const Color(0xFF4F46E5),
+              foregroundColor: Colors.white,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              onPressed: _openAddExpense,
+              child: const Icon(Icons.add_a_photo_rounded),
+            )
+          : FloatingActionButton.extended(
+              backgroundColor: const Color(0xFF4F46E5),
+              foregroundColor: Colors.white,
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              onPressed: _openAddExpense,
+              icon: const Icon(Icons.add_a_photo_rounded, size: 18),
+              label: Text(
+                localizations.newExpense,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                ),
+              ),
+            ),
     );
   }
 }

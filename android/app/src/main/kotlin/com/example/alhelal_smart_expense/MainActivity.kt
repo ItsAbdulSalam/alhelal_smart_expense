@@ -1,4 +1,4 @@
-package com.example.alhelal_smart_expense
+package com.alhelal.smartexpense
 
 import io.flutter.embedding.android.FlutterActivity
 
