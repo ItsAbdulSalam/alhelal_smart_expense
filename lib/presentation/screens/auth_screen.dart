@@ -1,9 +1,10 @@
 import 'dart:ui' as ui;
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/utils/locale_controller.dart';
+import '../../data/repositories/laravel_auth_repository.dart';
 import '../../l10n/app_localizations.dart';
 import 'dashboard_loader.dart';
 
@@ -16,9 +17,12 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+
+  final LaravelAuthRepository _authRepo = LaravelAuthRepository();
 
   bool _isSignUp = false;
   bool _isLoading = false;
@@ -27,6 +31,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -88,62 +93,53 @@ class _AuthScreenState extends State<AuthScreen> {
       final password = _passwordController.text.trim();
 
       if (_isSignUp) {
-        final res = await Supabase.instance.client.auth.signUp(
+        final name = _nameController.text.trim();
+        final confirmPassword = _confirmPasswordController.text.trim();
+
+        await _authRepo.register(
+          name: name,
           email: email,
           password: password,
+          passwordConfirmation: confirmPassword,
         );
 
-        if (res.user != null) {
-          _showNotification(
-            isArabic
-                ? 'تم إنشاء الحساب بنجاح! جاري الدخول...'
-                : 'Account created successfully! Logging in...',
-            isError: false,
-          );
-
-          if (!mounted) return;
-
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const DashboardLoader()),
-            );
-          });
-        }
+        _showNotification(
+          isArabic
+              ? 'تم إنشاء الحساب بنجاح! جاري الدخول...'
+              : 'Account created successfully! Logging in...',
+          isError: false,
+        );
       } else {
-        final res = await Supabase.instance.client.auth.signInWithPassword(
-          email: email,
-          password: password,
-        );
-
-        if (res.user != null) {
-          if (!mounted) return;
-
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const DashboardLoader()),
-            );
-          });
-        }
+        await _authRepo.login(email: email, password: password);
       }
-    } on AuthException catch (e) {
-      String msg = e.message;
 
-      if (msg.contains('Invalid login credentials')) {
-        msg = loc.invalidCredentials;
-      } else if (msg.contains('User already registered')) {
-        msg = isArabic
-            ? 'هذا البريد مسجل بالفعل، يرجى تسجيل الدخول'
-            : 'Email already registered, please login';
-      } else if (msg.contains('Password should be at least')) {
-        msg = isArabic
-            ? 'كلمة المرور يجب ألا تقل عن 6 خانات'
-            : 'Password must be at least 6 characters';
+      if (!mounted) return;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const DashboardLoader()),
+        );
+      });
+    } on DioException catch (e) {
+      String msg = isArabic
+          ? 'تعذر الاتصال بالسيرفر، يرجى المحاولة لاحقاً'
+          : 'Failed to connect to server, please try again';
+
+      final responseData = e.response?.data;
+      if (responseData is Map && responseData['message'] != null) {
+        final serverMsg = responseData['message'].toString();
+        if (serverMsg.contains('Invalid') || e.response?.statusCode == 401) {
+          msg = loc.invalidCredentials;
+        } else if (serverMsg.contains('taken') ||
+            serverMsg.contains('already')) {
+          msg = isArabic
+              ? 'هذا البريد مسجل بالفعل، يرجى تسجيل الدخول'
+              : 'Email already registered, please login';
+        } else {
+          msg = serverMsg;
+        }
       }
 
       _showNotification(msg, isError: true);
@@ -253,7 +249,6 @@ class _AuthScreenState extends State<AuthScreen> {
         backgroundColor: const Color(0xFF0B0F19),
         body: Stack(
           children: [
-            // إضاءة الخلفية الثابتة
             Positioned(
               top: -120,
               left: isArabic ? null : -100,
@@ -272,7 +267,6 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ),
             ),
-
             Positioned(
               bottom: -150,
               right: isArabic ? null : -100,
@@ -291,7 +285,6 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ),
             ),
-
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
@@ -354,9 +347,7 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                           ),
                         ),
-
                         const SizedBox(height: 16),
-
                         isDesktop
                             ? Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -408,9 +399,7 @@ class _AuthScreenState extends State<AuthScreen> {
             color: Color(0xFF818CF8),
           ),
         ),
-
         const SizedBox(height: 24),
-
         const Text(
           'Alhelal Smart Expense',
           style: TextStyle(
@@ -420,9 +409,7 @@ class _AuthScreenState extends State<AuthScreen> {
             letterSpacing: -0.5,
           ),
         ),
-
         const SizedBox(height: 12),
-
         SizedBox(
           width: double.infinity,
           child: Text(
@@ -437,9 +424,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           ),
         ),
-
         const SizedBox(height: 36),
-
         _buildFeatureItem(
           Icons.auto_awesome_rounded,
           isArabic
@@ -451,9 +436,7 @@ class _AuthScreenState extends State<AuthScreen> {
           const Color(0xFF818CF8),
           isArabic,
         ),
-
         const SizedBox(height: 18),
-
         _buildFeatureItem(
           Icons.pie_chart_outline_rounded,
           isArabic
@@ -465,17 +448,15 @@ class _AuthScreenState extends State<AuthScreen> {
           const Color(0xFF34D399),
           isArabic,
         ),
-
         const SizedBox(height: 18),
-
         _buildFeatureItem(
           Icons.shield_outlined,
           isArabic
               ? 'تخزين سحابي آمن ومشفر'
               : 'Secure and encrypted cloud storage',
           isArabic
-              ? 'حماية فائقة لبياناتك المالية وفواتيرك عبر بنية تحتية آمنة ومتكاملة مع Supabase\u200E'
-              : 'Ultimate protection for your financial data backed by Supabase infrastructure.',
+              ? 'حماية فائقة لبياناتك المالية وفواتيرك عبر بنية تحتية سحابية مستقلة ومؤمنة.\u200E'
+              : 'Ultimate protection for your financial data backed by secure cloud infrastructure.',
           const Color(0xFF38BDF8),
           isArabic,
         ),
@@ -621,10 +602,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       isSelected: !_isSignUp,
                       onTap: () {
                         if (_isSignUp) {
-                          setState(() {
-                            _isSignUp = false;
-                          });
-
+                          setState(() => _isSignUp = false);
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             _formKey.currentState?.reset();
                           });
@@ -638,10 +616,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       isSelected: _isSignUp,
                       onTap: () {
                         if (!_isSignUp) {
-                          setState(() {
-                            _isSignUp = true;
-                          });
-
+                          setState(() => _isSignUp = true);
                           WidgetsBinding.instance.addPostFrameCallback((_) {
                             _formKey.currentState?.reset();
                           });
@@ -652,9 +627,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 ],
               ),
             ),
-
             const SizedBox(height: 28),
-
             Text(
               _isSignUp
                   ? (isArabic ? 'إنشاء حساب جديد' : 'Create New Account')
@@ -665,9 +638,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-
             const SizedBox(height: 6),
-
             Text(
               _isSignUp
                   ? (isArabic
@@ -676,9 +647,28 @@ class _AuthScreenState extends State<AuthScreen> {
                   : loc.enterDetails,
               style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
             ),
-
             const SizedBox(height: 24),
-
+            if (_isSignUp) ...[
+              _buildInputField(
+                controller: _nameController,
+                label: isArabic ? 'الاسم الكامل' : 'Full Name',
+                hint: isArabic ? 'عبد السلام' : 'AbdulSalam',
+                icon: Icons.person_outline_rounded,
+                textDirection: isArabic
+                    ? ui.TextDirection.rtl
+                    : ui.TextDirection.ltr,
+                onFieldSubmitted: (_) => FocusScope.of(context).nextFocus(),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return isArabic
+                        ? 'يرجى إدخال الاسم'
+                        : 'Please enter your name';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 18),
+            ],
             _buildInputField(
               controller: _emailController,
               label: loc.email,
@@ -691,23 +681,18 @@ class _AuthScreenState extends State<AuthScreen> {
                 if (value == null || value.trim().isEmpty) {
                   return loc.emailRequired;
                 }
-
                 final emailRegex = RegExp(
                   r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
                 );
-
                 if (!emailRegex.hasMatch(value.trim())) {
                   return isArabic
                       ? 'يرجى إدخال صيغة بريد إلكتروني صحيحة'
                       : 'Please enter a valid email format';
                 }
-
                 return null;
               },
             ),
-
             const SizedBox(height: 18),
-
             _buildInputField(
               controller: _passwordController,
               label: loc.password,
@@ -719,9 +704,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 if (_isSignUp) {
                   FocusScope.of(context).nextFocus();
                 } else {
-                  if (!_isLoading) {
-                    _submit();
-                  }
+                  if (!_isLoading) _submit();
                 }
               },
               suffixIcon: IconButton(
@@ -733,29 +716,23 @@ class _AuthScreenState extends State<AuthScreen> {
                   size: 20,
                 ),
                 onPressed: () {
-                  setState(() {
-                    _obscurePassword = !_obscurePassword;
-                  });
+                  setState(() => _obscurePassword = !_obscurePassword);
                 },
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
                   return loc.passwordRequired;
                 }
-
                 if (value.trim().length < 6) {
                   return isArabic
                       ? 'كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام'
                       : 'Password must be at least 6 characters';
                 }
-
                 return null;
               },
             ),
-
             if (_isSignUp) ...[
               const SizedBox(height: 18),
-
               _buildInputField(
                 controller: _confirmPasswordController,
                 label: isArabic ? 'تأكيد كلمة المرور' : 'Confirm Password',
@@ -764,9 +741,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 obscureText: _obscureConfirmPassword,
                 textDirection: ui.TextDirection.ltr,
                 onFieldSubmitted: (_) {
-                  if (!_isLoading) {
-                    _submit();
-                  }
+                  if (!_isLoading) _submit();
                 },
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -788,20 +763,16 @@ class _AuthScreenState extends State<AuthScreen> {
                         ? 'يرجى تأكيد كلمة المرور'
                         : 'Please confirm your password';
                   }
-
                   if (value.trim() != _passwordController.text.trim()) {
                     return isArabic
                         ? 'كلمتا المرور غير متطابقتين'
                         : 'Passwords do not match';
                   }
-
                   return null;
                 },
               ),
             ],
-
             const SizedBox(height: 28),
-
             ElevatedButton(
               onPressed: _isLoading ? null : _submit,
               style: ElevatedButton.styleFrom(
@@ -849,16 +820,11 @@ class _AuthScreenState extends State<AuthScreen> {
                       ],
                     ),
             ),
-
             const SizedBox(height: 20),
-
             Center(
               child: GestureDetector(
                 onTap: () {
-                  setState(() {
-                    _isSignUp = !_isSignUp;
-                  });
-
+                  setState(() => _isSignUp = !_isSignUp);
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     _formKey.currentState?.reset();
                   });
@@ -968,9 +934,7 @@ class _AuthScreenState extends State<AuthScreen> {
             fontSize: 13,
           ),
         ),
-
         const SizedBox(height: 8),
-
         TextFormField(
           controller: controller,
           obscureText: obscureText,

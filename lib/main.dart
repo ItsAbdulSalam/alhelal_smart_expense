@@ -1,20 +1,22 @@
-import 'package:alhelal_smart_expense/core/services/local_expense_service.dart';
-import 'package:alhelal_smart_expense/core/theme/app_theme.dart';
-import 'package:alhelal_smart_expense/core/theme/theme_controller.dart';
-import 'package:alhelal_smart_expense/core/utils/locale_controller.dart';
-import 'package:alhelal_smart_expense/l10n/app_localizations.dart';
-import 'package:alhelal_smart_expense/presentation/widgets/connectivity_banner.dart';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/services/api_client.dart';
+import 'core/services/local_expense_service.dart';
+import 'core/theme/app_theme.dart';
+import 'core/theme/theme_controller.dart';
+import 'core/utils/locale_controller.dart';
+import 'data/datasources/expense_laravel_remote_data_source.dart';
+import 'data/repositories/laravel_auth_repository.dart';
+import 'data/repositories/laravel_expense_repository.dart';
+import 'l10n/app_localizations.dart';
 import 'presentation/screens/auth_screen.dart';
 import 'presentation/screens/dashboard_loader.dart';
+import 'presentation/widgets/connectivity_banner.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,8 +28,12 @@ void main() async {
     debugPrint('ℹ️ .env bypass');
   }
 
-  // 2. قراءة التفضيلات (اللغة والثيم)
+  // 2. تهيئة ApiClient الخاص بسيرفر Laravel
+  ApiClient.init();
+
+  // 3. قراءة تفضيلات اللغة والمظهر
   final prefs = await SharedPreferences.getInstance();
+
   final savedLangCode = prefs.getString('language_code') ?? 'ar';
   final initialLocale = Locale(savedLangCode);
   LocaleController.locale.value = initialLocale;
@@ -40,7 +46,7 @@ void main() async {
   };
   ThemeController.themeMode.value = initialThemeMode;
 
-  // 3. تهيئة Hive
+  // 4. تهيئة التخزين المحلي عبر Hive
   if (!kIsWeb) {
     await Hive.initFlutter();
     if (!Hive.isBoxOpen('expenses_box')) {
@@ -49,27 +55,27 @@ void main() async {
     await LocalExpenseService.initQueueBox();
   }
 
-  // 4. تهيئة Supabase
-  final supabaseUrl = const String.fromEnvironment('SUPABASE_URL').isNotEmpty
-      ? const String.fromEnvironment('SUPABASE_URL')
-      : (dotenv.env['SUPABASE_URL'] ?? '');
-
-  final supabaseAnonKey =
-      const String.fromEnvironment('SUPABASE_ANON_KEY').isNotEmpty
-      ? const String.fromEnvironment('SUPABASE_ANON_KEY')
-      : (dotenv.env['SUPABASE_ANON_KEY'] ?? '');
-
-  if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
-    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+  // 5. اختبار الاتصال وجلب البيانات من Laravel
+  try {
+    final laravelRepo = LaravelExpenseRepository(
+      ExpenseLaravelRemoteDataSource(dio: ApiClient.dio),
+    );
+    final expenses = await laravelRepo.getExpenses();
+    debugPrint(
+      '🎉 LARAVEL API SUCCESS: تم جلب ${expenses.length} مصاريف بنجاح!',
+    );
+  } catch (e) {
+    debugPrint('❌ LARAVEL API ERROR: $e');
   }
 
-  // 5. تحديد الشاشة الأولى مباشرة
-  final session = Supabase.instance.client.auth.currentSession;
-  final Widget initialScreen = session != null
+  // 6. تحديد الشاشة الأولى بناءً على توكن مصادقة Laravel
+  final authRepo = LaravelAuthRepository();
+  final bool isLoggedIn = await authRepo.isAuthenticated();
+
+  final Widget initialScreen = isLoggedIn
       ? const DashboardLoader()
       : const AuthScreen();
 
-  // تشغيل التطبيق بعد اكتمال كل شيء للانتقال الفوري
   runApp(
     MyApp(
       initialScreen: initialScreen,
@@ -153,7 +159,6 @@ class _MyAppState extends State<MyApp> {
           child: ConnectivityBanner(child: child ?? const SizedBox()),
         );
       },
-      // تفتح شاشة التطبيق فوراً بدون أي مرحلة وسيطة
       home: widget.initialScreen,
     );
   }

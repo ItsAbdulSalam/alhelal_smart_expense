@@ -1,17 +1,27 @@
+import 'dart:io';
 import 'dart:ui' as ui;
+import 'package:alhelal_smart_expense/core/services/api_client.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/utils/csv_exporter.dart';
 import '../../core/utils/pdf_exporter.dart';
 import '../../data/models/expense_model.dart';
-import '../../data/repositories/expense_repository.dart';
 import 'add_expense_screen.dart';
+import 'analytics_screen.dart';
 import 'auth_screen.dart';
+import 'report_preview_screen.dart';
 import '../../core/utils/locale_controller.dart';
 import '../../l10n/app_localizations.dart';
 import 'profile_screen.dart';
+import '../../data/datasources/expense_laravel_remote_data_source.dart';
+import '../../data/datasources/budget_laravel_remote_data_source.dart';
+import '../../data/repositories/laravel_expense_repository.dart';
+import '../../data/repositories/laravel_budget_repository.dart';
+import '../../data/repositories/laravel_auth_repository.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -21,7 +31,10 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  late final ExpenseRepository _repository;
+  late final LaravelExpenseRepository _repository;
+  late final LaravelBudgetRepository _budgetRepository;
+  final LaravelAuthRepository _authRepository = LaravelAuthRepository();
+
   Future<List<ExpenseModel>>? _expensesFuture;
   int _touchedChartIndex = -1;
 
@@ -34,7 +47,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _selectedTimeFilter = 'هذا الشهر';
   DateTimeRange? _customDateRange;
 
-  // تخزين الكاش لتفادي تكرار عمليات التصفية في كل frame
   List<ExpenseModel>? _cachedAllExpenses;
   List<ExpenseModel> _cachedFilteredExpenses = [];
   double _cachedTotalAmount = 0.0;
@@ -43,11 +55,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _repository = ExpenseRepository(Supabase.instance.client);
+    _repository = LaravelExpenseRepository(ExpenseLaravelRemoteDataSource());
+    _budgetRepository = LaravelBudgetRepository(
+      BudgetLaravelRemoteDataSource(),
+    );
+    _loadSavedBudget();
 
-    // تأخير الـ 150ms الضروري لأداء التليفون وخفض الـ TBT
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 150), () {
+      Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted) _loadExpenses();
       });
     });
@@ -57,6 +72,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSavedBudget() async {
+    // 1. استرجاع سريع من الذاكرة المحلية كـ Fallback
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedBudget = prefs.getDouble('monthly_budget');
+      if (savedBudget != null && mounted) {
+        setState(() {
+          _monthlyBudget = savedBudget;
+        });
+      }
+    } catch (_) {}
+
+    // 2. المزامنة وجلب الميزانية المسجلة للشهر الحالي من Laravel API
+    try {
+      final now = DateTime.now();
+      final monthYear = DateFormat('yyyy-MM').format(now);
+      final budgets = await _budgetRepository.getBudgets(monthYear: monthYear);
+
+      if (budgets.isNotEmpty && mounted) {
+        final totalBudget = budgets.fold<double>(
+          0.0,
+          (sum, item) => sum + item.amount,
+        );
+        if (totalBudget > 0) {
+          setState(() {
+            _monthlyBudget = totalBudget;
+          });
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setDouble('monthly_budget', totalBudget);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error syncing budget with backend: $e');
+    }
   }
 
   void _loadExpenses() {
@@ -71,7 +122,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context,
       MaterialPageRoute(builder: (_) => const AddExpenseScreen()),
     );
-    if (result == true) _loadExpenses();
+    if (result == true) {
+      _loadExpenses();
+      _loadSavedBudget();
+    }
   }
 
   void _recomputeMetrics(List<ExpenseModel> allExpenses) {
@@ -239,6 +293,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final controller = TextEditingController(
       text: _monthlyBudget.toStringAsFixed(0),
     );
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -269,7 +324,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'أدخل سقف الإنفاق المستهدف لهذا الشهر لتلقي تنبيهات دورية:',
+              'أدخل سقف الإنفاق المستهدف لهذا الشهر:',
               style: TextStyle(fontSize: 13, color: subTextColor),
             ),
             const SizedBox(height: 16),
@@ -307,12 +362,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: borderColor),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF4F46E5),
-                    width: 1.5,
-                  ),
+                focusedBorder: const OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                  borderSide: BorderSide(color: Color(0xFF4F46E5), width: 1.5),
                 ),
               ),
             ),
@@ -335,11 +387,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
               final val = double.tryParse(controller.text.trim());
               if (val != null && val > 0) {
-                setState(() => _monthlyBudget = val);
-                Navigator.pop(ctx);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setDouble('monthly_budget', val);
+
+                if (mounted) {
+                  setState(() => _monthlyBudget = val);
+                }
+
+                try {
+                  final now = DateTime.now();
+                  final monthYear = DateFormat('yyyy-MM').format(now);
+                  await _budgetRepository.setBudget(
+                    category: 'General',
+                    amount: val,
+                    currency: 'TRY',
+                    monthYear: monthYear,
+                  );
+                } catch (e) {
+                  debugPrint('Failed to save budget on server: $e');
+                }
+
+                if (mounted) {
+                  Navigator.pop(ctx);
+                }
               }
             },
             child: Text(localizations.save),
@@ -358,16 +431,77 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Color borderColor,
   ) {
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    final rawImagePath = expense.receiptImagePath;
+    Widget? imageWidget;
 
-    String? fullImageUrl;
-    if (expense.receiptImagePath != null &&
-        expense.receiptImagePath!.isNotEmpty) {
-      if (expense.receiptImagePath!.startsWith('http')) {
-        fullImageUrl = expense.receiptImagePath;
+    if (rawImagePath != null && rawImagePath.trim().isNotEmpty) {
+      final cleanPath = rawImagePath.trim();
+
+      if (cleanPath.startsWith('http://') || cleanPath.startsWith('https://')) {
+        imageWidget = Image.network(
+          cleanPath,
+          height: 240,
+          width: double.infinity,
+          fit: BoxFit.contain,
+          loadingBuilder: (ctx, child, progress) {
+            if (progress == null) return child;
+            return Container(
+              height: 180,
+              alignment: Alignment.center,
+              child: const CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: Color(0xFF4F46E5),
+              ),
+            );
+          },
+          errorBuilder: (_, _, _) =>
+              _buildImageErrorBox(isDark, borderColor, subTextColor),
+        );
+      } else if (!kIsWeb &&
+          (cleanPath.contains(':\\') ||
+              cleanPath.contains(':/') ||
+              cleanPath.startsWith('/'))) {
+        final localFile = File(cleanPath);
+        if (localFile.existsSync()) {
+          imageWidget = Image.file(
+            localFile,
+            height: 240,
+            width: double.infinity,
+            fit: BoxFit.contain,
+          );
+        } else {
+          imageWidget = _buildImageErrorBox(
+            isDark,
+            borderColor,
+            subTextColor,
+            message: 'الملف المحلي للفاتورة غير موجود على الجهاز',
+          );
+        }
       } else {
-        fullImageUrl = Supabase.instance.client.storage
-            .from('receipts')
-            .getPublicUrl(expense.receiptImagePath!);
+        final normalizedPath = cleanPath.startsWith('storage/')
+            ? cleanPath
+            : 'storage/$cleanPath';
+        final fullLaravelUrl = 'http://127.0.0.1:8000/$normalizedPath';
+
+        imageWidget = Image.network(
+          fullLaravelUrl,
+          height: 240,
+          width: double.infinity,
+          fit: BoxFit.contain,
+          loadingBuilder: (ctx, child, progress) {
+            if (progress == null) return child;
+            return Container(
+              height: 180,
+              alignment: Alignment.center,
+              child: const CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: Color(0xFF4F46E5),
+              ),
+            );
+          },
+          errorBuilder: (_, _, _) =>
+              _buildImageErrorBox(isDark, borderColor, subTextColor),
+        );
       }
     }
 
@@ -381,7 +515,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           width: double.infinity,
           padding: EdgeInsets.fromLTRB(
             24,
-            24,
+            20,
             24,
             24 + MediaQuery.paddingOf(ctx).bottom,
           ),
@@ -389,6 +523,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             color: cardBg,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             border: Border.all(color: borderColor),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
+                blurRadius: 25,
+                offset: const Offset(0, -5),
+              ),
+            ],
           ),
           child: SingleChildScrollView(
             child: Column(
@@ -397,8 +538,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Center(
                   child: Container(
-                    width: 44,
-                    height: 4,
+                    width: 48,
+                    height: 5,
                     decoration: BoxDecoration(
                       color: isDark
                           ? const Color(0xFF334155)
@@ -407,39 +548,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: Text(
-                        expense.title,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            expense.title,
+                            style: TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w800,
+                              color: textColor,
+                            ),
+                          ),
+                          if (expense.merchantName != null &&
+                              expense.merchantName!.trim().isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              expense.merchantName!,
+                              style: TextStyle(
+                                color: subTextColor,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     Text(
                       '${expense.amount.toStringAsFixed(2)} ${expense.currency}',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: 22,
                         fontWeight: FontWeight.w900,
-                        color: textColor,
+                        color: isDark
+                            ? const Color(0xFF38BDF8)
+                            : const Color(0xFF4F46E5),
                       ),
                     ),
                   ],
                 ),
-                if (expense.merchantName != null &&
-                    expense.merchantName!.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    expense.merchantName!,
-                    style: TextStyle(color: subTextColor, fontSize: 13),
-                  ),
-                ],
                 Divider(height: 28, color: borderColor),
                 _buildDetailRow(
                   Icons.calendar_month_rounded,
@@ -448,7 +601,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   subTextColor,
                   textColor,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 _buildDetailRow(
                   _getCategoryIcon(expense.category),
                   isArabic ? 'التصنيف' : 'Category',
@@ -456,8 +609,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   subTextColor,
                   textColor,
                 ),
-                if (expense.notes != null && expense.notes!.isNotEmpty) ...[
-                  const SizedBox(height: 10),
+                if (expense.notes != null &&
+                    expense.notes!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
                   _buildDetailRow(
                     Icons.note_alt_outlined,
                     isArabic ? 'ملاحظات' : 'Notes',
@@ -466,24 +620,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     textColor,
                   ),
                 ],
-                if (fullImageUrl != null) ...[
-                  const SizedBox(height: 20),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(14),
-                    child: Image.network(
-                      fullImageUrl,
-                      height: 200,
-                      width: double.infinity,
-                      fit: BoxFit.contain,
-                      cacheWidth: 600, // منع استهلاك الذاكرة
+                if (imageWidget != null) ...[
+                  const SizedBox(height: 22),
+                  Text(
+                    isArabic
+                        ? 'مستند / صورة الفاتورة المرفقة'
+                        : 'Attached Bill Receipt',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF070D1E)
+                          : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: borderColor),
+                    ),
+                    padding: const EdgeInsets.all(8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: imageWidget,
                     ),
                   ),
                 ],
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildImageErrorBox(
+    bool isDark,
+    Color borderColor,
+    Color subTextColor, {
+    String? message,
+  }) {
+    return Container(
+      height: 110,
+      width: double.infinity,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF1E293B).withValues(alpha: 0.5)
+            : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.broken_image_rounded, size: 28, color: subTextColor),
+          const SizedBox(height: 6),
+          Text(
+            message ?? 'صورة الفاتورة غير متوفرة أو تعذر تحميلها',
+            style: TextStyle(
+              color: subTextColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -938,12 +1143,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(color: borderColor),
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                  color: Color(0xFF4F46E5),
-                  width: 1.5,
-                ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+                borderSide: BorderSide(color: Color(0xFF4F46E5), width: 1.5),
               ),
             ),
           ),
@@ -967,7 +1169,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          // Wrap بدل التمرير الأفقي: لا يقص العناصر على الشاشات الصغيرة
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1077,12 +1278,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _handlePdfExport({required bool isDirectDownload}) async {
     if (_cachedFilteredExpenses.isEmpty) return;
-    await PdfExporter.exportExpenseReport(
-      expenses: _cachedFilteredExpenses,
-      periodName: _selectedTimeFilter,
-      totalAmount: _cachedTotalAmount,
-      isDirectDownload: isDirectDownload,
-    );
+    try {
+      await PdfExporter.exportExpenseReport(
+        expenses: _cachedFilteredExpenses,
+        periodName: _selectedTimeFilter,
+        totalAmount: _cachedTotalAmount,
+        isDirectDownload: isDirectDownload,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تعذر تصدير تقرير PDF: $e'),
+            backgroundColor: const Color(0xFFE11D48),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _confirmLogout(
@@ -1111,8 +1323,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         content: Text(
           isArabic
-              ? 'هل أنت متأكد أنك تريد تسجيل الخروج من التطبيق؟'
-              : 'Are you sure you want to log out of the app?',
+              ? 'هل أنت متأكد أنك تريد تسجيل الخروج من المنصة؟'
+              : 'Are you sure you want to log out of the platform?',
           style: TextStyle(color: subTextColor),
         ),
         actions: [
@@ -1137,7 +1349,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     if (shouldLogout == true) {
-      await Supabase.instance.client.auth.signOut();
+      await _authRepository.logout();
+      if (Hive.isBoxOpen('expenses_box')) {
+        await Hive.box('expenses_box').clear();
+      }
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AuthScreen()),
@@ -1146,7 +1361,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  /// أزرار الشريط العلوي للموبايل: الأفاتار + قائمة واحدة تجمع كل الإجراءات
   List<Widget> _buildMobileActions(
     bool isArabic,
     Color cardBg,
@@ -1157,12 +1371,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final localizations = AppLocalizations.of(context)!;
 
     return [
+      IconButton(
+        tooltip: 'التحليلات المالية',
+        padding: const EdgeInsets.all(6),
+        constraints: const BoxConstraints(),
+        icon: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: borderColor),
+          ),
+          child: const Icon(
+            Icons.analytics_rounded,
+            size: 18,
+            color: Color(0xFF4F46E5),
+          ),
+        ),
+        onPressed: () {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const AnalyticsScreen()));
+        },
+      ),
+      const SizedBox(width: 4),
       const DashboardUserAvatarButton(),
       PopupMenuButton<String>(
         icon: Icon(Icons.more_vert_rounded, color: textColor),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         onSelected: (v) {
           switch (v) {
+            case 'analytics':
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AnalyticsScreen()),
+              );
+              break;
             case 'lang':
               LocaleController.setLocale(Locale(isArabic ? 'en' : 'ar'));
               break;
@@ -1170,15 +1413,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _handlePdfExport(isDirectDownload: true);
               break;
             case 'pdf_print':
-              _handlePdfExport(isDirectDownload: false);
+              if (_cachedFilteredExpenses.isNotEmpty) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ReportPreviewScreen(
+                      expenses: _cachedFilteredExpenses,
+                      periodName: _selectedTimeFilter,
+                      totalAmount: _cachedTotalAmount,
+                    ),
+                  ),
+                );
+              }
               break;
             case 'excel':
               if (_cachedFilteredExpenses.isNotEmpty) {
-                CsvExporter.exportExpenses(_cachedFilteredExpenses);
+                CsvExporter.exportExpenses(
+                  _cachedFilteredExpenses,
+                  context: context,
+                );
               }
               break;
             case 'refresh':
               _loadExpenses();
+              _loadSavedBudget();
               break;
             case 'logout':
               _confirmLogout(cardBg, borderColor, textColor, subTextColor);
@@ -1186,6 +1444,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }
         },
         itemBuilder: (_) => [
+          PopupMenuItem(
+            value: 'analytics',
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.analytics_rounded,
+                  size: 18,
+                  color: Color(0xFF4F46E5),
+                ),
+                const SizedBox(width: 10),
+                Text(isArabic ? 'التحليلات المالية' : 'Analytics & Insights'),
+              ],
+            ),
+          ),
           PopupMenuItem(
             value: 'lang',
             child: Row(
@@ -1268,7 +1540,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ];
   }
 
-  /// أزرار الشريط العلوي للتابلت والويب (كما كانت)
   List<Widget> _buildWideActions(
     bool isArabic,
     Color cardBg,
@@ -1279,6 +1550,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final localizations = AppLocalizations.of(context)!;
 
     return [
+      IconButton(
+        tooltip: 'التحليلات المالية',
+        constraints: const BoxConstraints(),
+        padding: const EdgeInsets.all(6),
+        icon: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: const Color(0xFF4F46E5).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: const Color(0xFF4F46E5).withValues(alpha: 0.3),
+              width: 1.5,
+            ),
+          ),
+          child: const Icon(
+            Icons.analytics_rounded,
+            size: 18,
+            color: Color(0xFF4F46E5),
+          ),
+        ),
+        onPressed: () {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const AnalyticsScreen()));
+        },
+      ),
+      const SizedBox(width: 4),
       PopupMenuButton<Locale>(
         tooltip: 'Change Language',
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1363,10 +1661,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (val == 'pdf_download') {
             _handlePdfExport(isDirectDownload: true);
           } else if (val == 'pdf_print') {
-            _handlePdfExport(isDirectDownload: false);
+            if (_cachedFilteredExpenses.isNotEmpty) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ReportPreviewScreen(
+                    expenses: _cachedFilteredExpenses,
+                    periodName: _selectedTimeFilter,
+                    totalAmount: _cachedTotalAmount,
+                  ),
+                ),
+              );
+            }
           } else if (val == 'excel') {
             if (_cachedFilteredExpenses.isNotEmpty) {
-              CsvExporter.exportExpenses(_cachedFilteredExpenses);
+              CsvExporter.exportExpenses(
+                _cachedFilteredExpenses,
+                context: context,
+              );
             }
           }
         },
@@ -1438,7 +1750,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: Icon(Icons.refresh_rounded, size: 18, color: subTextColor),
         ),
-        onPressed: _loadExpenses,
+        onPressed: () {
+          _loadExpenses();
+          _loadSavedBudget();
+        },
       ),
       const SizedBox(width: 4),
       const DashboardUserAvatarButton(),
@@ -1478,7 +1793,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // استقرار الألوان والتباين التام لمنع البهتان في وضع النظام والوضع الفاتح
     final scaffoldBg = isDark
         ? const Color(0xFF030712)
         : const Color(0xFFF1F5F9);
@@ -1560,7 +1874,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   }
 
                   final allExpenses = snapshot.data ?? [];
-                  // حساب المصفوفات مرة واحدة فقط عند وصول بيانات جديدة
                   if (_cachedAllExpenses != allExpenses) {
                     _recomputeMetrics(allExpenses);
                   }
@@ -1735,7 +2048,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ),
                       ),
-                      // رسم العناصر بطريقة كسولة توفر الذاكرة وزمن المعالجة
                       SliverList(
                         delegate: SliverChildBuilderDelegate((context, index) {
                           final expense = filteredExpenses[index];
@@ -1967,7 +2279,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           );
                         }, childCount: filteredExpenses.length),
                       ),
-                      // مسافة سفلية كافية حتى لا يغطي زر الإضافة آخر عنصر
                       SliverToBoxAdapter(
                         child: SizedBox(
                           height: MediaQuery.paddingOf(context).bottom + 96,
@@ -2014,18 +2325,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-/// زر الأفاتار التفاعلي المدمج في الشريط العلوي لعرض صورة الحساب الحقيقية
-class DashboardUserAvatarButton extends StatelessWidget {
+class DashboardUserAvatarButton extends StatefulWidget {
   const DashboardUserAvatarButton({super.key});
 
   @override
+  State<DashboardUserAvatarButton> createState() =>
+      _DashboardUserAvatarButtonState();
+}
+
+class _DashboardUserAvatarButtonState extends State<DashboardUserAvatarButton> {
+  String _displayName = 'U';
+  String? _avatarUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserData();
+  }
+
+  Future<void> _fetchUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    final localName = prefs.getString('user_name');
+    final localAvatar = prefs.getString('user_avatar_url');
+
+    try {
+      final res = await ApiClient.dio.get('/user');
+      if (res.data != null && mounted) {
+        final data = res.data is Map ? res.data : {};
+        final serverAvatar = data['avatar_url']?.toString();
+        setState(() {
+          _displayName = (data['name'] ?? localName ?? 'U').toString();
+          _avatarUrl = (serverAvatar != null && serverAvatar.trim().isNotEmpty)
+              ? serverAvatar
+              : localAvatar;
+        });
+        return;
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          if (localName != null && localName.isNotEmpty) {
+            _displayName = localName;
+          }
+          _avatarUrl = localAvatar;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final user = Supabase.instance.client.auth.currentUser;
-    final metadata = user?.userMetadata ?? {};
-    final avatarUrl = metadata['avatar_url']?.toString();
-    final fullName = metadata['full_name']?.toString() ?? user?.email ?? 'U';
-    final initial = fullName.trim().isNotEmpty
-        ? fullName.trim()[0].toUpperCase()
+    final initial = _displayName.trim().isNotEmpty
+        ? _displayName.trim()[0].toUpperCase()
         : 'U';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -2040,6 +2391,7 @@ class DashboardUserAvatarButton extends StatelessWidget {
             await Navigator.of(
               context,
             ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+            _fetchUserData();
           },
           child: Container(
             width: 36,
@@ -2068,9 +2420,9 @@ class DashboardUserAvatarButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               child: Container(
                 color: isDark ? const Color(0xFF0F172A) : Colors.white,
-                child: (avatarUrl != null && avatarUrl.trim().isNotEmpty)
+                child: (_avatarUrl != null && _avatarUrl!.trim().isNotEmpty)
                     ? Image.network(
-                        avatarUrl,
+                        _avatarUrl!,
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) =>
                             _buildInitial(initial, isDark),

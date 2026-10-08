@@ -36,12 +36,23 @@ class ExpenseModel {
       title: json['title']?.toString() ?? 'بدون عنوان',
       merchantName: json['merchant_name']?.toString(),
       category: json['category']?.toString() ?? 'عام',
-      amount: json['amount'] != null ? (json['amount'] as num).toDouble() : 0.0,
+      amount: json['amount'] != null
+          ? (json['amount'] is num
+                ? (json['amount'] as num).toDouble()
+                : double.tryParse(json['amount'].toString()) ?? 0.0)
+          : 0.0,
       currency: json['currency']?.toString() ?? 'TRY',
       expenseDate: json['expense_date'] != null
           ? DateTime.parse(json['expense_date'].toString())
           : DateTime.now(),
-      receiptImagePath: json['receipt_image_path']?.toString(),
+      // السطر المعدل لدعم جميع مسميات روابط ومسارات الصور القادمة من Laravel:
+      receiptImagePath:
+          (json['receipt_image_path'] ??
+                  json['receipt_image_url'] ??
+                  json['receipt_path'] ??
+                  json['image_url'] ??
+                  json['image'])
+              ?.toString(),
       rawGeminiJson: json['raw_gemini_json'] != null
           ? Map<String, dynamic>.from(json['raw_gemini_json'])
           : null,

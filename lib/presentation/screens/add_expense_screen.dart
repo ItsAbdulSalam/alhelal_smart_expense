@@ -1,14 +1,13 @@
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:alhelal_smart_expense/core/services/gemini_service.dart';
-import 'package:alhelal_smart_expense/data/models/expense_model.dart';
-import 'package:alhelal_smart_expense/data/repositories/expense_repository.dart';
 import '../../l10n/app_localizations.dart';
+import '../../data/datasources/expense_laravel_remote_data_source.dart';
 
 class AddExpenseScreen extends StatefulWidget {
   const AddExpenseScreen({super.key});
@@ -29,21 +28,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   String _selectedCurrency = 'TRY';
   DateTime _selectedDate = DateTime.now();
 
+  final ExpenseLaravelRemoteDataSource _remoteDataSource =
+      ExpenseLaravelRemoteDataSource();
+
   XFile? _pickedImage;
   bool _isAnalyzing = false;
   bool _isSaving = false;
 
   final ImagePicker _picker = ImagePicker();
-  late final ExpenseRepository _repository;
   final GeminiReceiptService _geminiService = GeminiReceiptService();
 
   final List<String> _currencies = ['TRY', 'USD', 'EUR', 'SAR'];
-
-  @override
-  void initState() {
-    super.initState();
-    _repository = ExpenseRepository(Supabase.instance.client);
-  }
 
   @override
   void dispose() {
@@ -57,9 +52,15 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
   Future<void> _pickAndProcessImage(ImageSource source) async {
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
+    final effectiveSource =
+        (!kIsWeb &&
+            (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
+        ? ImageSource.gallery
+        : source;
+
     try {
       final XFile? image = await _picker.pickImage(
-        source: source,
+        source: effectiveSource,
         imageQuality: 85,
       );
 
@@ -133,8 +134,8 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                 const SizedBox(width: 8),
                 Text(
                   isArabic
-                      ? 'تمت قراءة بيانات الفاتورة بنجاح'
-                      : 'Receipt data extracted successfully',
+                      ? 'تمت قراءة بيانات الفاتورة بنجاح عبر الذكاء الاصطناعي'
+                      : 'Receipt data extracted successfully via AI',
                 ),
               ],
             ),
@@ -214,28 +215,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
     try {
-      String? uploadedImagePath;
-
-      if (_pickedImage != null) {
-        final bytes = await _pickedImage!.readAsBytes();
-        final fileName =
-            '${DateTime.now().millisecondsSinceEpoch}_${_pickedImage!.name}';
-        uploadedImagePath = await _repository.uploadReceiptImage(
-          bytes: bytes,
-          fileName: fileName,
-        );
-      }
-
-      final currentUser = Supabase.instance.client.auth.currentUser;
-      if (currentUser == null) {
-        throw Exception(
-          isArabic
-              ? 'انتهت جلسة تسجيل الدخول. يرجى تسجيل الدخول مرة أخرى.'
-              : 'Your login session has expired. Please sign in again.',
-        );
-      }
-      final currentUserId = currentUser.id;
-
       final parsedAmount = double.tryParse(_amountController.text.trim());
       if (parsedAmount == null || parsedAmount <= 0) {
         throw Exception(
@@ -243,26 +222,58 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
         );
       }
 
-      final expense = ExpenseModel(
-        id: '',
-        userId: currentUserId,
-        title: _titleController.text.trim(),
-        merchantName: _merchantController.text.trim().isEmpty
-            ? null
-            : _merchantController.text.trim(),
-        amount: parsedAmount,
-        currency: _selectedCurrency,
-        category: _selectedCategory,
-        expenseDate: _selectedDate,
-        receiptImagePath: uploadedImagePath,
-        notes: _notesController.text.trim().isEmpty
-            ? null
-            : _notesController.text.trim(),
-        isAiExtracted: _pickedImage != null,
-        createdAt: DateTime.now(),
-      );
+      final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
-      await _repository.addExpense(expense);
+      // تجهيز الحزمة عبر FormData لضمان رفع ونقل الصورة إلى Laravel بشكل سليم
+      dynamic payload;
+
+      if (_pickedImage != null) {
+        MultipartFile multipartImage;
+        if (kIsWeb) {
+          final bytes = await _pickedImage!.readAsBytes();
+          multipartImage = MultipartFile.fromBytes(
+            bytes,
+            filename: _pickedImage!.name,
+          );
+        } else {
+          multipartImage = await MultipartFile.fromFile(
+            _pickedImage!.path,
+            filename: _pickedImage!.path.split(Platform.pathSeparator).last,
+          );
+        }
+
+        payload = FormData.fromMap({
+          'title': _titleController.text.trim(),
+          'merchant_name': _merchantController.text.trim().isEmpty
+              ? null
+              : _merchantController.text.trim(),
+          'amount': parsedAmount,
+          'currency': _selectedCurrency,
+          'category': _selectedCategory,
+          'expense_date': formattedDate,
+          'notes': _notesController.text.trim().isEmpty
+              ? null
+              : _notesController.text.trim(),
+          'receipt_image': multipartImage,
+          'receipt_image_path': _pickedImage!.path,
+        });
+      } else {
+        payload = {
+          'title': _titleController.text.trim(),
+          'merchant_name': _merchantController.text.trim().isEmpty
+              ? null
+              : _merchantController.text.trim(),
+          'amount': parsedAmount,
+          'currency': _selectedCurrency,
+          'category': _selectedCategory,
+          'expense_date': formattedDate,
+          'notes': _notesController.text.trim().isEmpty
+              ? null
+              : _notesController.text.trim(),
+        };
+      }
+
+      await _remoteDataSource.createExpense(payload);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -784,9 +795,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: borderColor),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderSide: BorderSide(color: Color(0xFF4F46E5), width: 1.5),
         ),
       ),
     );
@@ -846,9 +857,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: borderColor),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5),
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: BorderRadius.all(Radius.circular(14)),
+          borderSide: BorderSide(color: Color(0xFF4F46E5), width: 1.5),
         ),
       ),
     );

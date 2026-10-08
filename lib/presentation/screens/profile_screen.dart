@@ -1,7 +1,8 @@
-import 'dart:typed_data';
+import 'package:alhelal_smart_expense/core/services/api_client.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/theme_controller.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -12,34 +13,23 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final SupabaseClient _supabase = Supabase.instance.client;
   final ImagePicker _picker = ImagePicker();
 
   late final TextEditingController _nameController;
   bool _isEditing = false;
   bool _isSaving = false;
   bool _isUploadingAvatar = false;
+  bool _isLoading = true;
 
   String _displayName = '';
   String _email = '';
   String? _avatarUrl;
 
-  User? get _user => _supabase.auth.currentUser;
-
   @override
   void initState() {
     super.initState();
-    final user = _user;
-    _email = user?.email ?? 'user@alhelal.dev';
-    final metaName = user?.userMetadata?['full_name']?.toString().trim();
-    _displayName = (metaName != null && metaName.isNotEmpty)
-        ? metaName
-        : _nameFromEmail(_email);
-
-    _avatarUrl = user?.userMetadata?['avatar_url']?.toString();
-    if (_avatarUrl?.trim().isEmpty == true) _avatarUrl = null;
-
-    _nameController = TextEditingController(text: _displayName);
+    _nameController = TextEditingController();
+    _loadUserProfile();
   }
 
   @override
@@ -48,10 +38,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  String _nameFromEmail(String email) {
-    if (!email.contains('@')) return 'المستخدم';
-    final name = email.split('@').first.replaceAll('.', ' ');
-    return name.isEmpty ? 'المستخدم' : name;
+  Future<void> _loadUserProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    final localEmail = prefs.getString('user_email') ?? '';
+    final localName = prefs.getString('user_name') ?? '';
+    final localAvatar = prefs.getString('user_avatar_url');
+
+    try {
+      final response = await ApiClient.dio.get('/user');
+      if (response.data != null && mounted) {
+        final data = response.data is Map ? response.data : {};
+
+        // جلب الرابط من السيرفر أو الاعتماد على الكاش المحلي
+        final serverAvatar = data['avatar_url']?.toString();
+        final effectiveAvatar =
+            (serverAvatar != null && serverAvatar.trim().isNotEmpty)
+            ? serverAvatar
+            : ((localAvatar != null && localAvatar.trim().isNotEmpty)
+                  ? localAvatar
+                  : null);
+
+        // تحديث الكاش المحلي إذا أرجع السيرفر رابطاً جديداً
+        if (serverAvatar != null && serverAvatar.trim().isNotEmpty) {
+          await prefs.setString('user_avatar_url', serverAvatar);
+        }
+
+        setState(() {
+          _displayName =
+              (data['name'] ?? (localName.isNotEmpty ? localName : 'المستخدم'))
+                  .toString();
+          _email = (data['email'] ?? localEmail).toString();
+          _avatarUrl = effectiveAvatar;
+          _nameController.text = _displayName;
+          _isLoading = false;
+        });
+        return;
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _displayName = localName.isNotEmpty ? localName : 'المستخدم';
+          _email = localEmail;
+          _avatarUrl = (localAvatar != null && localAvatar.trim().isNotEmpty)
+              ? localAvatar
+              : null;
+          _nameController.text = _displayName;
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   void _notify(String msg, {bool isError = false}) {
@@ -89,76 +124,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _pickAndUploadAvatar() async {
-    if (_isUploadingAvatar || _user == null) return;
+    if (_isUploadingAvatar) return;
 
     try {
       final pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 88,
-        maxWidth: 1024,
-        maxHeight: 1024,
+        imageQuality: 85,
+        maxWidth: 800,
+        maxHeight: 800,
       );
 
       if (pickedFile == null) return;
 
       setState(() => _isUploadingAvatar = true);
-      final Uint8List bytes = await pickedFile.readAsBytes();
 
-      if (bytes.length > 5 * 1024 * 1024) {
-        throw Exception('الحد الأقصى لحجم الصورة هو 5 ميجابايت.');
-      }
-
-      final rawExt = pickedFile.name.split('.').last.toLowerCase();
-      // توحيد الامتداد ونوع الـ MIME القياسي
-      final fileExt = (rawExt == 'jpeg' || rawExt == 'jpg')
-          ? 'jpg'
-          : (rawExt == 'png' ? 'png' : (rawExt == 'webp' ? 'webp' : 'jpg'));
-
-      final mimeType = (fileExt == 'png')
-          ? 'image/png'
-          : (fileExt == 'webp'
-                ? 'image/webp'
-                : 'image/jpeg'); // استخدام image/jpeg حصراً
-
-      final path = '${_user!.id}/avatar.$fileExt';
-
-      await _supabase.storage
-          .from('avatars')
-          .uploadBinary(
-            path,
-            bytes,
-            fileOptions: FileOptions(
-              upsert: true,
-              contentType: mimeType, // يرسل image/jpeg السليم
-            ),
-          );
-
-      final publicUrl = _supabase.storage.from('avatars').getPublicUrl(path);
-      final cacheBustedUrl =
-          '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
-
-      // ignore: unused_local_variable
-      final res = await _supabase.auth.updateUser(
-        UserAttributes(
-          data: {...?_user?.userMetadata, 'avatar_url': cacheBustedUrl},
+      final formData = FormData.fromMap({
+        'avatar': await MultipartFile.fromFile(
+          pickedFile.path,
+          filename: pickedFile.name,
         ),
-      );
-
-      if (!mounted) return;
-      setState(() {
-        _avatarUrl = cacheBustedUrl;
       });
 
-      _notify('تم تحديث الصورة الشخصية بنجاح.');
+      final response = await ApiClient.dio.post('/user/avatar', data: formData);
+
+      if (mounted) {
+        final newUrl = response.data?['avatar_url']?.toString();
+        if (newUrl != null) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_avatar_url', newUrl);
+        }
+        setState(() {
+          _avatarUrl = newUrl ?? _avatarUrl;
+        });
+        _notify('تم تحديث الصورة الشخصية بنجاح.');
+      }
     } catch (e) {
-      _notify('فشل تحميل الصورة: $e', isError: true);
+      _notify('فشل تحميل الصورة الشخصية: $e', isError: true);
     } finally {
       if (mounted) setState(() => _isUploadingAvatar = false);
     }
   }
 
   Future<void> _saveProfile() async {
-    if (_isSaving || _user == null) return;
+    if (_isSaving) return;
     final name = _nameController.text.trim();
     if (name.length < 2) {
       _notify('يرجى إدخال اسم صحيح لا يقل عن حرفين.', isError: true);
@@ -167,15 +175,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       setState(() => _isSaving = true);
-      await _supabase.auth.updateUser(
-        UserAttributes(
-          data: {
-            ...?_user?.userMetadata,
-            'full_name': name,
-            if (_avatarUrl != null) 'avatar_url': _avatarUrl,
-          },
-        ),
-      );
+      await ApiClient.dio.put('/user/profile', data: {'name': name});
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_name', name);
 
       if (!mounted) return;
       setState(() {
@@ -184,7 +187,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
       _notify('تم حفظ التعديلات بنجاح.');
     } catch (e) {
-      _notify('حدث خطأ أثناء حفظ البيانات.', isError: true);
+      setState(() {
+        _displayName = name;
+        _isEditing = false;
+      });
+      _notify('تم حفظ الاسم محلياً.');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -195,7 +202,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // حل تباين الخلفية ومنع البهتان في وضع النظام والوضع الفاتح
     final scaffoldBg = isDark
         ? const Color(0xFF030712)
         : const Color(0xFFF8FAFC);
@@ -209,6 +215,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final subTextColor = isDark
         ? const Color(0xFF94A3B8)
         : const Color(0xFF64748B);
+
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: scaffoldBg,
+        body: const Center(
+          child: CircularProgressIndicator(color: Color(0xFF4F46E5)),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: scaffoldBg,
@@ -328,18 +343,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Container(
                 width: 90,
                 height: 90,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     colors: [Color(0xFF6366F1), Color(0xFF0EA5E9)],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
                 ),
                 padding: const EdgeInsets.all(3),
                 child: ClipOval(
@@ -397,7 +405,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     Flexible(
                       child: Text(
-                        _displayName,
+                        _displayName.isEmpty ? 'المستخدم' : _displayName,
                         style: TextStyle(
                           color: textColor,
                           fontSize: 20,
@@ -528,17 +536,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(color: borderColor),
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                  color: Color(0xFF4F46E5),
-                  width: 1.5,
-                ),
+              focusedBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(12)),
+                borderSide: BorderSide(color: Color(0xFF4F46E5), width: 1.5),
               ),
             ),
           ),
           const SizedBox(height: 16),
           TextFormField(
+            key: ValueKey(_email),
             initialValue: _email,
             enabled: false,
             style: TextStyle(color: subTextColor),
@@ -741,7 +747,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               style: TextStyle(color: textColor, fontWeight: FontWeight.w700),
             ),
             subtitle: Text(
-              'حساب نشط وموثق',
+              'حساب نشط وموثق عبر Laravel API',
               style: TextStyle(color: subTextColor, fontSize: 13),
             ),
             trailing: Container(

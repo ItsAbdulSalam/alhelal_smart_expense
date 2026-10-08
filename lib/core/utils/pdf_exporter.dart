@@ -1,30 +1,28 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../data/models/expense_model.dart';
 
 class PdfExporter {
-  static Future<void> exportExpenseReport({
+  static Future<Uint8List> buildPdfDocument({
     required List<ExpenseModel> expenses,
     required String periodName,
     required double totalAmount,
-    bool isDirectDownload = true,
   }) async {
     final pdf = pw.Document();
-
     final arabicFont = await PdfGoogleFonts.amiriRegular();
     final arabicFontBold = await PdfGoogleFonts.amiriBold();
 
     final now = DateTime.now();
     final reportDate = DateFormat('yyyy-MM-dd HH:mm').format(now);
-    final fileName = 'كشف_المصاريف_${DateFormat('yyyyMMdd').format(now)}.pdf';
 
-    // توزيع التصنيفات
     final Map<String, double> categoryTotals = {};
     for (var exp in expenses) {
-      categoryTotals[exp.category] =
-          (categoryTotals[exp.category] ?? 0.0) + exp.amount;
+      categoryTotals[exp.category] = (categoryTotals[exp.category] ?? 0.0) + exp.amount;
     }
 
     pdf.addPage(
@@ -34,65 +32,36 @@ class PdfExporter {
         theme: pw.ThemeData.withFont(base: arabicFont, bold: arabicFontBold),
         margin: const pw.EdgeInsets.all(32),
         build: (context) => [
-          // 1. ترويسة التقرير
           pw.Container(
             padding: const pw.EdgeInsets.only(bottom: 16),
             decoration: const pw.BoxDecoration(
-              border: pw.Border(
-                bottom: pw.BorderSide(color: PdfColors.indigo700, width: 2),
-              ),
+              border: pw.Border(bottom: pw.BorderSide(color: PdfColors.indigo700, width: 2)),
             ),
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
                     pw.Text(
                       'كشف المصاريف والعمليات المالية',
-                      style: pw.TextStyle(
-                        fontSize: 22,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.indigo900,
-                      ),
+                      style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900),
                     ),
                     pw.SizedBox(height: 4),
-                    pw.Text(
-                      'نظام إدارة المصاريف المالية | التقرير المالي الموحد',
-                      style: const pw.TextStyle(
-                        fontSize: 10,
-                        color: PdfColors.grey700,
-                      ),
-                    ),
+                    pw.Text('التقرير المالي الموحد لنظام إدارة النفقات', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                   ],
                 ),
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Text(
-                      'تاريخ الإصدار: $reportDate',
-                      style: const pw.TextStyle(
-                        fontSize: 9,
-                        color: PdfColors.grey700,
-                      ),
-                    ),
-                    pw.Text(
-                      'الفترة: $periodName',
-                      style: pw.TextStyle(
-                        fontSize: 10,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.indigo700,
-                      ),
-                    ),
+                    pw.Text('تاريخ الإصدار: $reportDate', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    pw.Text('الفترة: $periodName', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo700)),
                   ],
                 ),
               ],
             ),
           ),
           pw.SizedBox(height: 20),
-
-          // 2. بطاقات الإجماليات
           pw.Row(
             children: [
               pw.Expanded(
@@ -106,22 +75,9 @@ class PdfExporter {
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text(
-                        'إجمالي المصروفات',
-                        style: const pw.TextStyle(
-                          fontSize: 10,
-                          color: PdfColors.grey700,
-                        ),
-                      ),
+                      pw.Text('إجمالي المصروفات', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                       pw.SizedBox(height: 4),
-                      pw.Text(
-                        '${totalAmount.toStringAsFixed(2)} TRY',
-                        style: pw.TextStyle(
-                          fontSize: 18,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.indigo900,
-                        ),
-                      ),
+                      pw.Text('${totalAmount.toStringAsFixed(2)} TRY', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
                     ],
                   ),
                 ),
@@ -138,22 +94,9 @@ class PdfExporter {
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text(
-                        'عدد الفواتير المقيدة',
-                        style: const pw.TextStyle(
-                          fontSize: 10,
-                          color: PdfColors.grey700,
-                        ),
-                      ),
+                      pw.Text('عدد الفواتير المقيدة', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
                       pw.SizedBox(height: 4),
-                      pw.Text(
-                        '${expenses.length} عملية',
-                        style: pw.TextStyle(
-                          fontSize: 18,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.indigo900,
-                        ),
-                      ),
+                      pw.Text('${expenses.length} عملية', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.indigo900)),
                     ],
                   ),
                 ),
@@ -161,58 +104,25 @@ class PdfExporter {
             ],
           ),
           pw.SizedBox(height: 20),
-
-          // 3. جدول توزيع النفقات حسب الأقسام
-          pw.Text(
-            'توزيع النفقات حسب التصنيف:',
-            style: pw.TextStyle(
-              fontSize: 12,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.grey800,
-            ),
-          ),
+          pw.Text('توزيع النفقات حسب التصنيف:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
           pw.SizedBox(height: 8),
           pw.TableHelper.fromTextArray(
             headers: ['التصنيف', 'النسبة', 'المجموع'],
             data: categoryTotals.entries.map((e) {
-              final pct = totalAmount > 0
-                  ? ((e.value / totalAmount) * 100).toStringAsFixed(1)
-                  : '0';
+              final pct = totalAmount > 0 ? ((e.value / totalAmount) * 100).toStringAsFixed(1) : '0';
               return [e.key, '$pct%', '${e.value.toStringAsFixed(2)} TRY'];
             }).toList(),
-            headerStyle: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.white,
-              fontSize: 10,
-            ),
-            headerDecoration: const pw.BoxDecoration(
-              color: PdfColors.indigo800,
-            ),
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.indigo800),
             cellStyle: const pw.TextStyle(fontSize: 9),
             cellAlignment: pw.Alignment.center,
             cellHeight: 22,
           ),
           pw.SizedBox(height: 24),
-
-          // 4. جدول العمليات التفصيلي
-          pw.Text(
-            'بيان العمليات التفصيلية:',
-            style: pw.TextStyle(
-              fontSize: 12,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.grey800,
-            ),
-          ),
+          pw.Text('بيان العمليات التفصيلية:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800)),
           pw.SizedBox(height: 8),
           pw.TableHelper.fromTextArray(
-            headers: [
-              '#',
-              'بيان الفاتورة',
-              'المتجر / الشركة',
-              'التصنيف',
-              'التاريخ',
-              'المبلغ',
-            ],
+            headers: ['#', 'بيان الفاتورة', 'المتجر / الشركة', 'التصنيف', 'التاريخ', 'المبلغ'],
             data: List.generate(expenses.length, (i) {
               final exp = expenses[i];
               return [
@@ -224,61 +134,45 @@ class PdfExporter {
                 '${exp.amount.toStringAsFixed(2)} ${exp.currency}',
               ];
             }),
-            headerStyle: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.white,
-              fontSize: 10,
-            ),
-            headerDecoration: const pw.BoxDecoration(
-              color: PdfColors.blueGrey800,
-            ),
-            rowDecoration: const pw.BoxDecoration(
-              border: pw.Border(
-                bottom: pw.BorderSide(color: PdfColors.grey200, width: 0.5),
-              ),
-            ),
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 10),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+            rowDecoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey200, width: 0.5))),
             cellStyle: const pw.TextStyle(fontSize: 9),
             cellAlignment: pw.Alignment.center,
             cellHeight: 24,
-          ),
-          pw.SizedBox(height: 30),
-
-          // 5. التذييل
-          pw.Divider(color: PdfColors.grey300),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            children: [
-              pw.Text(
-                'تم استخراج هذا التقرير تلقائياً وهو صالح وموثق محاسبياً.',
-                style: const pw.TextStyle(
-                  fontSize: 8,
-                  color: PdfColors.grey600,
-                ),
-              ),
-              pw.Text(
-                'الصفحة 1 من 1',
-                style: const pw.TextStyle(
-                  fontSize: 8,
-                  color: PdfColors.grey600,
-                ),
-              ),
-            ],
           ),
         ],
       ),
     );
 
-    final bytes = await pdf.save();
+    return await pdf.save();
+  }
+
+  static Future<void> exportExpenseReport({
+    required List<ExpenseModel> expenses,
+    required String periodName,
+    required double totalAmount,
+    bool isDirectDownload = true,
+  }) async {
+    final bytes = await buildPdfDocument(
+      expenses: expenses,
+      periodName: periodName,
+      totalAmount: totalAmount,
+    );
+
+    final fileName = 'كشف_المصاريف_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.pdf';
+
+    if (!kIsWeb && Platform.isWindows) {
+      Directory? downloadDir = await getDownloadsDirectory();
+      downloadDir ??= await getApplicationDocumentsDirectory();
+      final file = File('${downloadDir.path}\\$fileName');
+      await file.writeAsBytes(bytes);
+      await Process.run('explorer.exe', [file.path]);
+      return;
+    }
 
     if (isDirectDownload) {
-      // تنزيل فوري للملف إلى مجلد التنزيلات
       await Printing.sharePdf(bytes: bytes, filename: fileName);
-    } else {
-      // فتح نافذة المعاينة والطباعة
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => bytes,
-        name: fileName,
-      );
     }
   }
 }

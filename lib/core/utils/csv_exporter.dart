@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../data/models/expense_model.dart';
 import 'csv_saver_stub.dart'
     if (dart.library.js_interop) 'csv_saver_web.dart'
@@ -23,88 +24,90 @@ class CsvExporter {
     }
 
     final double totalAmount = expenses.fold(0.0, (sum, e) => sum + e.amount);
-    final String printDate = DateFormat(
-      'yyyy-MM-dd HH:mm',
-    ).format(DateTime.now());
+    final String printDate = DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now());
 
     try {
-      // -------------------------------------------------------------------------
-      // 1. طريقة الويب: تصميم HTML احترافي وفخم يفتح في إكسل كجدول منسق 100%
-      // -------------------------------------------------------------------------
-      if (kIsWeb) {
-        final StringBuffer htmlBuffer = StringBuffer();
-
-        htmlBuffer.writeln('''
+      final StringBuffer excelHtml = StringBuffer();
+      excelHtml.writeln('''
 <html xmlns:o="urn:schemas-microsoft-com:office:office" 
       xmlns:x="urn:schemas-microsoft-com:office:excel" 
       xmlns="http://www.w3.org/TR/REC-html40">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<!--[if gte mso 9]>
+<xml>
+ <x:ExcelWorkbook>
+  <x:ExcelWorksheets>
+   <x:ExcelWorksheet>
+    <x:Name>كشف المصاريف</x:Name>
+    <x:WorksheetOptions>
+     <x:DisplayRightToLeft/>
+     <x:DoNotDisplayGridlines/>
+    </x:WorksheetOptions>
+   </x:ExcelWorksheet>
+  </x:ExcelWorksheets>
+ </x:ExcelWorkbook>
+</xml>
+<![endif]-->
 <style>
-  body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl; }
-  table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-  th { background-color: #1E293B; color: #FFFFFF; font-weight: bold; padding: 12px 14px; border: 1px solid #CBD5E1; text-align: center; }
-  td { padding: 10px 14px; border: 1px solid #E2E8F0; text-align: center; color: #334155; mso-number-format:"\\@"; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; direction: rtl; }
+  .report-title { font-size: 20px; font-weight: bold; color: #1E1B4B; text-align: center; padding: 15px; }
+  .report-meta { font-size: 12px; color: #475569; text-align: center; padding-bottom: 15px; }
+  table { border-collapse: collapse; width: 100%; margin: 0 auto; }
+  th { background-color: #312E81; color: #ffffff; font-weight: bold; padding: 12px 18px; border: 1px solid #1E1B4B; text-align: center; font-size: 13px; }
+  td { padding: 10px 14px; border: 1px solid #CBD5E1; text-align: center; font-size: 12px; color: #1E293B; mso-number-format:"\\@"; }
+  .td-text { text-align: right; }
+  .td-money { font-weight: bold; color: #047857; text-align: center; }
   tr:nth-child(even) { background-color: #F8FAFC; }
-  .total-row { background-color: #EEF2FF; font-weight: bold; color: #312E81; }
-  .title-header { font-size: 18px; font-weight: bold; color: #0F172A; text-align: center; padding: 16px; }
-  .sub-header { font-size: 12px; color: #64748B; text-align: center; padding-bottom: 12px; }
+  .total-row { background-color: #EEF2FF; font-weight: bold; border-top: 2px solid #312E81; }
+  .total-label { font-size: 14px; color: #1E1B4B; font-weight: bold; text-align: center; }
+  .total-val { font-size: 15px; color: #1E1B4B; font-weight: 900; }
 </style>
 </head>
 <body>
-  <div class="title-header">كشف المصاريف والنفقات المالية</div>
-  <div class="sub-header">تاريخ الإصدار: $printDate | إجمالي السجلات: ${expenses.length}</div>
+  <div class="report-title">كشف المصاريف والعمليات المالية</div>
+  <div class="report-meta">تاريخ الاستخراج: $printDate | عدد الفواتير: ${expenses.length}</div>
   <table>
     <thead>
       <tr>
-        <th>م</th>
-        <th>التاريخ</th>
-        <th>بيان المصروف</th>
-        <th>الجهة / المتجر</th>
-        <th>التصنيف</th>
-        <th>المبلغ</th>
-        <th>العملة</th>
-        <th>ملاحظات إضافية</th>
+        <th style="width: 50px;">#</th>
+        <th style="width: 120px;">التاريخ</th>
+        <th style="width: 220px;">بيان الفاتورة</th>
+        <th style="width: 180px;">المتجر / الجهة</th>
+        <th style="width: 140px;">التصنيف</th>
+        <th style="width: 110px;">المبلغ</th>
+        <th style="width: 80px;">العملة</th>
+        <th style="width: 280px;">الملاحظات والبيانات</th>
       </tr>
     </thead>
     <tbody>
 ''');
 
-        for (int i = 0; i < expenses.length; i++) {
-          final exp = expenses[i];
-          final index = i + 1;
-          final date = DateFormat('yyyy-MM-dd').format(exp.expenseDate);
-          final title = exp.title;
-          final merchant =
-              (exp.merchantName != null && exp.merchantName!.isNotEmpty)
-              ? exp.merchantName!
-              : '—';
-          final category = exp.category;
-          final amount = exp.amount.toStringAsFixed(2);
-          final currency = exp.currency;
-          final notes = (exp.notes != null && exp.notes!.isNotEmpty)
-              ? exp.notes!
-              : '—';
+      for (int i = 0; i < expenses.length; i++) {
+        final exp = expenses[i];
+        final merchant = (exp.merchantName != null && exp.merchantName!.trim().isNotEmpty) ? exp.merchantName! : '—';
+        final notes = (exp.notes != null && exp.notes!.trim().isNotEmpty) ? exp.notes! : '—';
+        final date = DateFormat('yyyy-MM-dd').format(exp.expenseDate);
 
-          htmlBuffer.writeln('''
+        excelHtml.writeln('''
       <tr>
-        <td>$index</td>
+        <td>${i + 1}</td>
         <td>$date</td>
-        <td style="text-align: right;">$title</td>
-        <td style="text-align: right;">$merchant</td>
-        <td>$category</td>
-        <td style="font-weight: bold;">$amount</td>
-        <td>$currency</td>
-        <td style="text-align: right;">$notes</td>
+        <td class="td-text">${exp.title}</td>
+        <td class="td-text">$merchant</td>
+        <td>${exp.category}</td>
+        <td class="td-money">${exp.amount.toStringAsFixed(2)}</td>
+        <td>${exp.currency}</td>
+        <td class="td-text">$notes</td>
       </tr>
 ''');
-        }
+      }
 
-        htmlBuffer.writeln('''
+      excelHtml.writeln('''
       <tr class="total-row">
-        <td colspan="5" style="text-align: center;">المجموع الكلي للمصاريف</td>
-        <td style="font-weight: 900; font-size: 15px;">${totalAmount.toStringAsFixed(2)}</td>
-        <td>TRY</td>
+        <td colspan="5" class="total-label">المجموع الإجمالي لكافة النفقات</td>
+        <td class="total-val">${totalAmount.toStringAsFixed(2)}</td>
+        <td style="font-weight: bold;">TRY</td>
         <td></td>
       </tr>
     </tbody>
@@ -113,76 +116,36 @@ class CsvExporter {
 </html>
 ''');
 
-        final Uint8List bytes = utf8.encode(htmlBuffer.toString());
-        final filename =
-            'كشف_المصاريف_${DateFormat('yyyy-MM-dd').format(DateTime.now())}.xls';
+      final List<int> bytes = utf8.encode(excelHtml.toString());
+      final String filename = 'Expenses_Report_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.xls';
 
-        await saveAndLaunchCsv(bytes, filename);
-      }
-      // -------------------------------------------------------------------------
-      // 2. طريقة الموبايل: ملف CSV منظم ومضبوط للمشاركة
-      // -------------------------------------------------------------------------
-      else {
-        final List<List<dynamic>> rows = [];
-        rows.add(['كشف المصاريف والنفقات المالية']);
-        rows.add([
-          'تاريخ الإصدار:',
-          printDate,
-          'إجمالي السجلات:',
-          expenses.length,
-        ]);
-        rows.add([]);
-        rows.add([
-          'م',
-          'التاريخ',
-          'بيان المصروف',
-          'الجهة / المتجر',
-          'التصنيف',
-          'المبلغ',
-          'العملة',
-          'ملاحظات إضافية',
-        ]);
+      if (!kIsWeb && Platform.isWindows) {
+        Directory? downloadDir = await getDownloadsDirectory();
+        downloadDir ??= await getApplicationDocumentsDirectory();
+        final file = File('${downloadDir.path}\\$filename');
+        await file.writeAsBytes(bytes);
 
-        for (int i = 0; i < expenses.length; i++) {
-          final exp = expenses[i];
-          rows.add([
-            i + 1,
-            DateFormat('yyyy-MM-dd').format(exp.expenseDate),
-            exp.title,
-            exp.merchantName ?? '—',
-            exp.category,
-            exp.amount.toStringAsFixed(2),
-            exp.currency,
-            exp.notes ?? '—',
-          ]);
+        if (context != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('تم تصدير ملف الإكسل الاحترافي بنجاح إلى التنزيلات: ${file.path}'),
+              backgroundColor: const Color(0xFF10B981),
+            ),
+          );
         }
-
-        rows.add([]);
-        rows.add([
-          'المجموع الكلي',
-          '',
-          '',
-          '',
-          '',
-          totalAmount.toStringAsFixed(2),
-          'TRY',
-          '',
-        ]);
-
-        String csvData = rows
-            .map((row) => row.map((val) => '"$val"').join(','))
-            .join('\n');
-        final List<int> bytes = utf8.encode('\uFEFF$csvData');
-        final String dateStr = DateFormat('yyyy_MM_dd').format(DateTime.now());
-        final filename = 'Expense_Report_$dateStr.csv';
-
-        await saveAndLaunchCsv(bytes, filename);
+        await Process.run('explorer.exe', [file.path]);
+        return;
       }
+
+      await saveAndLaunchCsv(bytes, filename);
     } catch (e) {
       if (context != null && context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('حدث خطأ أثناء التصدير: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('حدث خطأ أثناء التصدير: $e'),
+            backgroundColor: const Color(0xFFE11D48),
+          ),
+        );
       }
     }
   }

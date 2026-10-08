@@ -9,6 +9,7 @@ Future<void> saveAndLaunchCsv(List<int> bytes, String fileName) async {
   await file.writeAsBytes(bytes, flush: true);
 
   final xFile = XFile(file.path);
+  // ignore: deprecated_member_use
   await Share.shareXFiles(
     [xFile],
     text: 'كشف المصاريف والنفقات المالية - Alhelal Smart Expense',
