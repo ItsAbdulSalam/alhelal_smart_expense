@@ -22,6 +22,7 @@ import '../../data/datasources/budget_laravel_remote_data_source.dart';
 import '../../data/repositories/laravel_expense_repository.dart';
 import '../../data/repositories/laravel_budget_repository.dart';
 import '../../data/repositories/laravel_auth_repository.dart';
+// v1.0.5 - analytics and ai advisor enabled
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
