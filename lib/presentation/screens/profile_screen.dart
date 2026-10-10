@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:alhelal_smart_expense/core/services/api_client.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _displayName = '';
   String _email = '';
   String? _avatarUrl;
+  File? _localSelectedImage; // لعرض الصورة المختارة محلياً وفوراً
 
   @override
   void initState() {
@@ -49,8 +51,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (response.data != null && mounted) {
         final data = response.data is Map ? response.data : {};
 
-        // جلب الرابط من السيرفر أو الاعتماد على الكاش المحلي
-        final serverAvatar = data['avatar_url']?.toString();
+        final serverAvatar = (data['avatar_url'] ?? data['user']?['avatar_url'])
+            ?.toString();
         final effectiveAvatar =
             (serverAvatar != null && serverAvatar.trim().isNotEmpty)
             ? serverAvatar
@@ -58,7 +60,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ? localAvatar
                   : null);
 
-        // تحديث الكاش المحلي إذا أرجع السيرفر رابطاً جديداً
         if (serverAvatar != null && serverAvatar.trim().isNotEmpty) {
           await prefs.setString('user_avatar_url', serverAvatar);
         }
@@ -136,11 +137,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (pickedFile == null) return;
 
-      setState(() => _isUploadingAvatar = true);
+      final file = File(pickedFile.path);
+
+      setState(() {
+        _isUploadingAvatar = true;
+        _localSelectedImage = file; // عرض الصورة المختارة مباشرة على الواجهة
+      });
 
       final formData = FormData.fromMap({
         'avatar': await MultipartFile.fromFile(
-          pickedFile.path,
+          file.path,
           filename: pickedFile.name,
         ),
       });
@@ -148,17 +154,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final response = await ApiClient.dio.post('/user/avatar', data: formData);
 
       if (mounted) {
-        final newUrl = response.data?['avatar_url']?.toString();
-        if (newUrl != null) {
+        final resData = response.data is Map ? response.data : {};
+        final newUrl = (resData['avatar_url'] ?? resData['data']?['avatar_url'])
+            ?.toString();
+
+        debugPrint('📸 Avatar Upload Response: ${response.data}');
+        debugPrint('📸 Final URL: $newUrl');
+
+        if (newUrl != null && newUrl.trim().isNotEmpty) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('user_avatar_url', newUrl);
+          setState(() {
+            _avatarUrl = newUrl;
+          });
         }
-        setState(() {
-          _avatarUrl = newUrl ?? _avatarUrl;
-        });
         _notify('تم تحديث الصورة الشخصية بنجاح.');
       }
     } catch (e) {
+      if (mounted) {
+        setState(() {
+          _localSelectedImage = null; // إعادة الوضع السابق في حال الفشل
+        });
+      }
       _notify('فشل تحميل الصورة الشخصية: $e', isError: true);
     } finally {
       if (mounted) setState(() => _isUploadingAvatar = false);
@@ -363,13 +380,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             ),
                           )
-                        : (_avatarUrl != null && _avatarUrl!.isNotEmpty)
-                        ? Image.network(
-                            _avatarUrl!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => _fallbackAvatar(),
-                          )
-                        : _fallbackAvatar(),
+                        : _buildAvatarImage(),
                   ),
                 ),
               ),
@@ -455,6 +466,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildAvatarImage() {
+    if (_localSelectedImage != null) {
+      return Image.file(
+        _localSelectedImage!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _fallbackAvatar(),
+      );
+    }
+
+    if (_avatarUrl != null && _avatarUrl!.trim().isNotEmpty) {
+      return Image.network(
+        _avatarUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          debugPrint('❌ Image load error: $error on URL: $_avatarUrl');
+          return _fallbackAvatar();
+        },
+      );
+    }
+
+    return _fallbackAvatar();
   }
 
   Widget _fallbackAvatar() {

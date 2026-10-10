@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,16 +32,19 @@ class LaravelAuthRepository {
         data: {'email': email, 'password': password},
       );
 
-      final data = response.data['data'];
-      final token = data['token'];
+      // التعامل بمرونة سواء كانت البيانات داخل data أو مباشرة في الجذر
+      final resData = response.data is Map<String, dynamic>
+          ? response.data
+          : {};
+      final dynamic token = resData['token'] ?? resData['data']?['token'];
 
       if (token != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_tokenKey, token.toString());
-        debugPrint('✅ تم حفظ التوكن الجديد بنجاح');
+        debugPrint('✅ تم حفظ التوكن بنجاح: $token');
       }
 
-      return data;
+      return Map<String, dynamic>.from(resData);
     } catch (e) {
       debugPrint('⚠️ خطأ في تسجيل الدخول: $e');
       rethrow;
@@ -65,18 +69,75 @@ class LaravelAuthRepository {
         },
       );
 
-      final data = response.data['data'];
-      final token = data['token'];
+      final resData = response.data is Map<String, dynamic>
+          ? response.data
+          : {};
+      final dynamic token = resData['token'] ?? resData['data']?['token'];
 
       if (token != null) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_tokenKey, token.toString());
-        debugPrint('✅ تم حفظ التوكن الجديد بعد التسجيل');
+        debugPrint('✅ تم حفظ التوكن الجديد بعد التسجيل: $token');
       }
 
-      return data;
+      return Map<String, dynamic>.from(resData);
     } catch (e) {
       debugPrint('⚠️ خطأ في إنشاء الحساب: $e');
+      rethrow;
+    }
+  }
+
+  /// رفع وتحديث الصورة الشخصية (Avatar)
+  Future<String?> uploadAvatar(File imageFile) async {
+    try {
+      final token = await getToken();
+      final fileName = imageFile.path.split(Platform.pathSeparator).last;
+
+      final formData = FormData.fromMap({
+        'avatar': await MultipartFile.fromFile(
+          imageFile.path,
+          filename: fileName,
+        ),
+      });
+
+      final response = await _dio.post(
+        '/user/avatar',
+        data: formData,
+        options: Options(
+          headers: {
+            if (token != null) 'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+
+      final resData = response.data;
+      final avatarUrl = resData['avatar_url'] ?? resData['data']?['avatar_url'];
+      debugPrint('✅ تم رفع الصورة بنجاح: $avatarUrl');
+      return avatarUrl?.toString();
+    } catch (e) {
+      debugPrint('⚠️ خطأ أثناء رفع الصورة الشخصية: $e');
+      rethrow;
+    }
+  }
+
+  /// تحديث اسم المستخدم
+  Future<void> updateProfileName(String newName) async {
+    try {
+      final token = await getToken();
+      await _dio.put(
+        '/user/profile',
+        data: {'name': newName},
+        options: Options(
+          headers: {
+            if (token != null) 'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
+        ),
+      );
+      debugPrint('✅ تم تحديث الاسم بنجاح');
+    } catch (e) {
+      debugPrint('⚠️ خطأ أثناء تحديث الملف الشخصي: $e');
       rethrow;
     }
   }
@@ -84,7 +145,13 @@ class LaravelAuthRepository {
   /// تسجيل الخروج ومسح التوكن
   Future<void> logout() async {
     try {
-      await _dio.post('/logout');
+      final token = await getToken();
+      await _dio.post(
+        '/logout',
+        options: Options(
+          headers: {if (token != null) 'Authorization': 'Bearer $token'},
+        ),
+      );
     } catch (e) {
       debugPrint('⚠️ تعذر إشعار السيرفر بتسجيل الخروج: $e');
     } finally {
