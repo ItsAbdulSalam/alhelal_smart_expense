@@ -1,6 +1,20 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
   <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes"
+    />
+
+    <!-- إثبات ملكية محرك بحث Google -->
+    <meta
+      name="google-site-verification"
+      content="JY5fg2Jpg45fxg3Ykxl4sAV-SvDD9qVlAvCDrq7_sL0"
+    />
+
+    <!-- حل توافقية Intl في محركات V8 القديمة -->
     <script>
       try {
         if (typeof Intl !== "undefined") {
@@ -17,17 +31,52 @@
 
     <base href="/" />
 
-    <meta charset="UTF-8" />
-    <meta content="IE=Edge" http-equiv="X-UA-Compatible" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes"
-    />
+    <!-- عنوان ووصف الموقع لمحركات البحث (SEO) -->
+    <title>Alhelal Smart Expense - تتبع المصاريف والنفقات الذكية</title>
     <meta
       name="description"
-      content="Alhelal Smart Expense - رفيقك المالي الذكي لإدارة وتحليل النفقات والفواتير بدقة متناهية عبر الذكاء الاصطناعي."
+      content="Alhelal Smart Expense - رفيقك المالي الذكي لإدارة وتحليل النفقات والميزانية الشخصية بدقة متناهية عبر الذكاء الاصطناعي. تتبع فواتيرك ومدخراتك بسهولة."
+    />
+    <meta
+      name="keywords"
+      content="Alhelal Smart Expense, مصاريف, إدارة الأموال, تتبع النفقات, ميزانية, فواتير, expense tracker, budget manager"
+    />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="Alhelal" />
+
+    <!-- الرابط الأساسي المعتمد لتوحيد قوة الأرشفة ومنع التكرار -->
+    <link rel="canonical" href="https://www.alhelalsmart.com/" />
+
+    <!-- وسوم المشاركة التفاعلية (Open Graph - WhatsApp / Facebook / LinkedIn) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://www.alhelalsmart.com/" />
+    <meta
+      property="og:title"
+      content="Alhelal Smart Expense - تتبع المصاريف والنفقات الذكية"
+    />
+    <meta
+      property="og:description"
+      content="تطبيقك المالي الشامل لإدارة وتحليل النفقات الشهرية والميزانية الشخصية بذكاء."
+    />
+    <meta
+      property="og:image"
+      content="https://www.alhelalsmart.com/icons/Icon-512.png"
     />
 
+    <!-- وسوم بطاقات Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://www.alhelalsmart.com/" />
+    <meta name="twitter:title" content="Alhelal Smart Expense" />
+    <meta
+      name="twitter:description"
+      content="تتبع وإدارة مصاريفك ونفقاتك الشهرية بدقة وسهولة عبر الويب."
+    />
+    <meta
+      name="twitter:image"
+      content="https://www.alhelalsmart.com/icons/Icon-512.png"
+    />
+
+    <!-- إعدادات شريط العنوان وتطبيق الويب (PWA) -->
     <meta name="theme-color" content="#030816" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta
@@ -35,111 +84,148 @@
       content="black-translucent"
     />
     <meta name="apple-mobile-web-app-title" content="Alhelal Smart Expense" />
+
     <link rel="apple-touch-icon" href="icons/Icon-192.png" />
     <link rel="icon" type="image/png" href="favicon.png" />
-
-    <title>Alhelal Smart Expense</title>
     <link rel="manifest" href="manifest.json" />
 
-    <!-- تنزيل فوري متوازي لمحرك WASM لتقليل وقت التجهيز على الموبايل -->
+    <!-- تسريع الأداء وتحميل مسبق لمحرك الـ WASM -->
     <link
       rel="preload"
       href="main.dart.wasm"
       as="fetch"
       type="application/wasm"
-      crossorigin
+      crossorigin=""
     />
 
     <style id="splash-screen-style">
-      * {
-        box-sizing: border-box;
-      }
       html,
       body {
         margin: 0;
         padding: 0;
         width: 100%;
         height: 100%;
-        background-color: #030816;
+        background-color: #000c2a;
         overflow: hidden;
       }
+
+      .center {
+        margin: 0;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+      }
+
       #web-splash {
         position: fixed;
-        inset: 0;
+        top: 0;
+        left: 0;
         width: 100%;
         height: 100%;
-        z-index: 999999;
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        background: radial-gradient(circle at center, #0a1738 0%, #030816 100%);
+        background-color: #000c2a;
+        z-index: 99999;
+        color: #ffffff;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        text-align: center;
       }
+
       .splash-card {
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
-        padding: 30px 40px;
-        border-radius: 24px;
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.08);
       }
+
       .splash-logo {
         width: 96px;
         height: 96px;
         object-fit: contain;
       }
-      .app-title {
-        margin-top: 20px;
-        font-family:
-          system-ui,
-          -apple-system,
-          sans-serif;
-        font-size: 20px;
-        font-weight: 700;
-        color: #f1f5f9;
-      }
+
       .app-subtitle {
-        margin-top: 4px;
-        font-family:
-          system-ui,
-          -apple-system,
-          sans-serif;
-        font-size: 12px;
-        color: #38bdf8;
-        font-weight: 500;
+        margin-top: 6px;
+        font-size: 13px;
+        opacity: 0.75;
+        letter-spacing: 0.5px;
       }
+
       .loading-bar {
         margin-top: 24px;
-        width: 120px;
+        width: 140px;
         height: 3px;
+        background: rgba(255, 255, 255, 0.15);
         border-radius: 3px;
-        background: rgba(255, 255, 255, 0.1);
-        position: relative;
         overflow: hidden;
+        position: relative;
       }
+
       .loading-progress {
-        position: absolute;
-        top: 0;
-        left: -40%;
-        width: 40%;
+        width: 100%;
         height: 100%;
-        background: #38bdf8;
-        border-radius: 3px;
-        animation: loadStream 1.2s infinite linear;
+        background: #3b82f6;
+        position: absolute;
+        left: -100%;
+        animation: loading 1.5s infinite ease-in-out;
       }
-      @keyframes loadStream {
+
+      @keyframes loading {
         0% {
-          left: -40%;
+          left: -100%;
+        }
+        50% {
+          left: 0%;
         }
         100% {
           left: 100%;
         }
       }
     </style>
+
+    <script id="splash-screen-script">
+      function removeSplashFromWeb() {
+        var splash = document.getElementById("splash");
+        var webSplash = document.getElementById("web-splash");
+        var splashBranding = document.getElementById("splash-branding");
+        if (splash) splash.remove();
+        if (webSplash) webSplash.remove();
+        if (splashBranding) splashBranding.remove();
+        document.body.style.background = "transparent";
+      }
+    </script>
   </head>
+
   <body>
+    <picture id="splash">
+      <source
+        srcset="
+          splash/img/light-1x.png 1x,
+          splash/img/light-2x.png 2x,
+          splash/img/light-3x.png 3x,
+          splash/img/light-4x.png 4x
+        "
+        media="(prefers-color-scheme: light)"
+      />
+      <source
+        srcset="
+          splash/img/dark-1x.png 1x,
+          splash/img/dark-2x.png 2x,
+          splash/img/dark-3x.png 3x,
+          splash/img/dark-4x.png 4x
+        "
+        media="(prefers-color-scheme: dark)"
+      />
+      <img
+        class="center"
+        aria-hidden="true"
+        src="splash/img/light-1x.png"
+        alt=""
+      />
+    </picture>
+
     <div id="web-splash">
       <div class="splash-card">
         <img
@@ -154,7 +240,12 @@
             this.src = 'favicon.png';
           "
         />
-        <div class="app-title">Alhelal Smart Expense</div>
+        <h1
+          class="app-title"
+          style="margin: 16px 0 0 0; font-size: 20px; font-weight: 600"
+        >
+          Alhelal Smart Expense
+        </h1>
         <div class="app-subtitle">Powered by AI</div>
         <div class="loading-bar">
           <div class="loading-progress"></div>
@@ -163,36 +254,13 @@
     </div>
 
     <script>
-      var observer = new MutationObserver(function (mutations) {
-        mutations.forEach(function (mutation) {
-          mutation.addedNodes.forEach(function (node) {
-            if (
-              node.nodeName === "META" &&
-              node.getAttribute("name") === "viewport"
-            ) {
-              var content = node.getAttribute("content") || "";
-              if (content.indexOf("user-scalable=no") !== -1) {
-                node.setAttribute(
-                  "content",
-                  "width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes",
-                );
-              }
-            }
-          });
-        });
-      });
-      observer.observe(document.head, { childList: true });
-
-      function onFlutterReady() {
-        var splash = document.getElementById("web-splash");
-        if (splash) {
-          splash.remove();
-        }
-      }
-      window.addEventListener("flutter-first-frame", onFlutterReady);
-      setTimeout(onFlutterReady, 800);
+      // إزالة شاشة البداية بمجرد رسم أول إطار في Flutter
+      window.addEventListener("flutter-first-frame", removeSplashFromWeb);
+      // إغلاق احترازي بعد ثانيتين كحد أقصى إذا تأخر الحدث
+      setTimeout(removeSplashFromWeb, 2000);
     </script>
 
-    <script src="flutter_bootstrap.js?v=12" async></script>
+    <!-- تشغيل بيئة Flutter Bootstrap بأسلوب غير معطل للرسم -->
+    <script src="flutter_bootstrap.js?v=13" async></script>
   </body>
 </html>
