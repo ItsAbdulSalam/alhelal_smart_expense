@@ -412,6 +412,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 }
 
                 if (mounted) {
+                  // ignore: use_build_context_synchronously
                   Navigator.pop(ctx);
                 }
               }
@@ -1362,6 +1363,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // Shared export menu design for both compact and wide layouts.
+  // Only the presentation changes; existing export callbacks stay untouched.
+  PopupMenuItem<String> _buildExportMenuItem({
+    required String value,
+    required String label,
+    required IconData icon,
+    required Color darkColor,
+    required Color lightColor,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = isDark ? darkColor : lightColor;
+    final foreground = isDark
+        ? const Color(0xFFF8FAFC)
+        : const Color(0xFF172033);
+
+    return PopupMenuItem<String>(
+      value: value,
+      height: 52,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: isDark ? 0.16 : 0.10),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: accent.withValues(alpha: isDark ? 0.24 : 0.15),
+              ),
+            ),
+            child: Icon(icon, size: 20, color: accent),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: TextStyle(
+              color: foreground,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<Widget> _buildMobileActions(
     bool isArabic,
     Color cardBg,
@@ -1370,6 +1419,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Color subTextColor,
   ) {
     final localizations = AppLocalizations.of(context)!;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return [
       IconButton(
@@ -1399,6 +1449,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const DashboardUserAvatarButton(),
       PopupMenuButton<String>(
         icon: Icon(Icons.more_vert_rounded, color: textColor),
+        tooltip: isArabic ? 'المزيد من الخيارات' : 'More options',
+        color: isDark ? const Color(0xFF1B1D29) : Colors.white,
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         onSelected: (v) {
           switch (v) {
@@ -1473,49 +1526,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          const PopupMenuItem(
+          _buildExportMenuItem(
             value: 'pdf_download',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.picture_as_pdf_rounded,
-                  size: 18,
-                  color: Color(0xFFEF4444),
-                ),
-                SizedBox(width: 10),
-                Text('Download PDF'),
-              ],
-            ),
+            label: 'Download PDF',
+            icon: Icons.picture_as_pdf_rounded,
+            darkColor: const Color(0xFFFF8793),
+            lightColor: const Color(0xFFD32F2F),
           ),
-          const PopupMenuItem(
+          _buildExportMenuItem(
             value: 'pdf_print',
-            child: Row(
-              children: [
-                Icon(Icons.print_rounded, size: 18),
-                SizedBox(width: 10),
-                Text('Print Report'),
-              ],
-            ),
+            label: 'Print Report',
+            icon: Icons.print_rounded,
+            darkColor: const Color(0xFF85B9FF),
+            lightColor: const Color(0xFF1565C0),
           ),
-          const PopupMenuItem(
+          _buildExportMenuItem(
             value: 'excel',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.file_download_rounded,
-                  size: 18,
-                  color: Color(0xFF10B981),
-                ),
-                SizedBox(width: 10),
-                Text('Export Excel'),
-              ],
-            ),
+            label: 'Export Excel',
+            icon: Icons.file_download_rounded,
+            darkColor: const Color(0xFF55E3AE),
+            lightColor: const Color(0xFF087F5B),
           ),
           PopupMenuItem(
             value: 'refresh',
             child: Row(
               children: [
-                const Icon(Icons.refresh_rounded, size: 18),
+                Icon(
+                  Icons.refresh_rounded,
+                  size: 18,
+                  color: isDark
+                      ? const Color(0xFF94B8FF)
+                      : const Color(0xFF475569),
+                ),
                 const SizedBox(width: 10),
                 Text(isArabic ? 'تحديث' : 'Refresh'),
               ],
@@ -1657,6 +1699,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const SizedBox(width: 4),
       PopupMenuButton<String>(
         tooltip: 'Export Options',
+        color: Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF1B1D29)
+            : Colors.white,
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         onSelected: (val) async {
           if (val == 'pdf_download') {
@@ -1683,44 +1729,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
             }
           }
         },
-        itemBuilder: (ctx) => const [
-          PopupMenuItem(
+        itemBuilder: (ctx) => [
+          _buildExportMenuItem(
             value: 'pdf_download',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.picture_as_pdf_rounded,
-                  color: Color(0xFFEF4444),
-                  size: 18,
-                ),
-                SizedBox(width: 10),
-                Text('Download PDF'),
-              ],
-            ),
+            label: 'Download PDF',
+            icon: Icons.picture_as_pdf_rounded,
+            darkColor: const Color(0xFFFF8793),
+            lightColor: const Color(0xFFD32F2F),
           ),
-          PopupMenuItem(
+          _buildExportMenuItem(
             value: 'pdf_print',
-            child: Row(
-              children: [
-                Icon(Icons.print_rounded, color: Color(0xFF0F172A), size: 18),
-                SizedBox(width: 10),
-                Text('Print Report'),
-              ],
-            ),
+            label: 'Print Report',
+            icon: Icons.print_rounded,
+            darkColor: const Color(0xFF85B9FF),
+            lightColor: const Color(0xFF1565C0),
           ),
-          PopupMenuItem(
+          _buildExportMenuItem(
             value: 'excel',
-            child: Row(
-              children: [
-                Icon(
-                  Icons.file_download_rounded,
-                  color: Color(0xFF10B981),
-                  size: 18,
-                ),
-                SizedBox(width: 10),
-                Text('Export Excel'),
-              ],
-            ),
+            label: 'Export Excel',
+            icon: Icons.file_download_rounded,
+            darkColor: const Color(0xFF55E3AE),
+            lightColor: const Color(0xFF087F5B),
           ),
         ],
         child: Container(

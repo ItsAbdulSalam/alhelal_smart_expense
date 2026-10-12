@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/utils/pdf_exporter.dart';
 import '../../data/models/expense_model.dart';
+import 'package:printing/printing.dart';
 
 class ReportPreviewScreen extends StatelessWidget {
   final List<ExpenseModel> expenses;
@@ -26,23 +27,46 @@ class ReportPreviewScreen extends StatelessWidget {
         totalAmount: totalAmount,
       );
 
-      final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}\\Expense_Report_Print.pdf');
-      await file.writeAsBytes(bytes);
+      if (kIsWeb) {
+        // Flutter Web: print directly from memory.
+        await Printing.layoutPdf(
+          onLayout: (_) async => bytes,
+          name: 'Expense_Report.pdf',
+        );
+      } else if (Platform.isWindows) {
+        // Windows: open the generated PDF with the default viewer.
+        final tempDir = await getTemporaryDirectory();
 
-      // فتح المستند في قارئ PDF الرسمي للنظام (Edge / Adobe) للحصول على أفضل تجربة طباعة
-      if (!kIsWeb && Platform.isWindows) {
-        await Process.run('cmd', ['/c', 'start', '', file.path]);
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('تعذر فتح واجهة الطباعة: $e'),
-            backgroundColor: const Color(0xFFE11D48),
-          ),
+        final file = File(
+          '${tempDir.path}${Platform.pathSeparator}Expense_Report_Print.pdf',
+        );
+
+        await file.writeAsBytes(bytes);
+
+        final result = await Process.run('cmd', ['/c', 'start', '', file.path]);
+
+        if (result.exitCode != 0) {
+          throw Exception('Failed to open PDF: ${result.stderr}');
+        }
+      } else {
+        // Other supported platforms: use the native print dialog.
+        await Printing.layoutPdf(
+          onLayout: (_) async => bytes,
+          name: 'Expense_Report.pdf',
         );
       }
+    } catch (e) {
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFFB91C1C),
+          content: Text(
+            'تعذر فتح واجهة الطباعة: $e',
+            style: const TextStyle(color: Colors.white),
+          ),
+        ),
+      );
     }
   }
 
