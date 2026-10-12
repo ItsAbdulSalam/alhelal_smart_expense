@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:alhelal_smart_expense/core/services/api_client.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -25,7 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _displayName = '';
   String _email = '';
   String? _avatarUrl;
-  File? _localSelectedImage; // لعرض الصورة المختارة محلياً وفوراً
+  Uint8List? _localSelectedBytes; // لعرض الصورة المختارة محلياً وفوراً
 
   @override
   void initState() {
@@ -137,18 +137,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (pickedFile == null) return;
 
-      final file = File(pickedFile.path);
+      final bytes = await pickedFile.readAsBytes();
 
       setState(() {
         _isUploadingAvatar = true;
-        _localSelectedImage = file; // عرض الصورة المختارة مباشرة على الواجهة
+        _localSelectedBytes = bytes;
       });
 
       final formData = FormData.fromMap({
-        'avatar': await MultipartFile.fromFile(
-          file.path,
-          filename: pickedFile.name,
-        ),
+        'avatar': MultipartFile.fromBytes(bytes, filename: pickedFile.name),
       });
 
       final response = await ApiClient.dio.post('/user/avatar', data: formData);
@@ -173,7 +170,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _localSelectedImage = null; // إعادة الوضع السابق في حال الفشل
+          _localSelectedBytes = null; // إعادة الوضع السابق في حال الفشل
         });
       }
       _notify('فشل تحميل الصورة الشخصية: $e', isError: true);
@@ -469,9 +466,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildAvatarImage() {
-    if (_localSelectedImage != null) {
-      return Image.file(
-        _localSelectedImage!,
+    if (_localSelectedBytes != null) {
+      return Image.memory(
+        _localSelectedBytes!,
         fit: BoxFit.cover,
         errorBuilder: (_, _, _) => _fallbackAvatar(),
       );

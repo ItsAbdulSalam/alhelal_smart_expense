@@ -47,8 +47,8 @@ class ExpenseModel {
           : DateTime.now(),
       // السطر المعدل لدعم جميع مسميات روابط ومسارات الصور القادمة من Laravel:
       receiptImagePath:
-          (json['receipt_image_path'] ??
-                  json['receipt_image_url'] ??
+          (json['receipt_image_url'] ??
+                  json['receipt_image_path'] ??
                   json['receipt_path'] ??
                   json['image_url'] ??
                   json['image'])
