@@ -132,10 +132,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   color: Colors.greenAccent,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  isArabic
-                      ? 'تمت قراءة بيانات الفاتورة بنجاح عبر الذكاء الاصطناعي'
-                      : 'Receipt data extracted successfully via AI',
+                Expanded(
+                  child: Text(
+                    isArabic
+                        ? 'تمت قراءة بيانات الفاتورة بنجاح عبر الذكاء الاصطناعي'
+                        : 'Receipt data extracted successfully via AI',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -285,10 +292,17 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
                   color: Colors.greenAccent,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  isArabic
-                      ? 'تم قيد الفاتورة بنجاح في السجلات المالية'
-                      : 'Expense successfully saved to records',
+                Expanded(
+                  child: Text(
+                    isArabic
+                        ? 'تم قيد الفاتورة بنجاح في السجلات المالية'
+                        : 'Expense successfully saved to records',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ),
               ],
             ),
