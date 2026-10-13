@@ -1,97 +1,252 @@
 import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../core/services/api_client.dart';
 
+enum AuthSessionStatus { authenticated, unauthenticated, connectionError }
+
 class LaravelAuthRepository {
-  final Dio _dio = ApiClient.dio;
+  LaravelAuthRepository({Dio? dio}) : _dio = dio ?? ApiClient.dio;
+
+  final Dio _dio;
+
   static const String _tokenKey = 'auth_token';
 
-  /// فحص هل المستخدم مسجل دخول حالياً
-  Future<bool> isAuthenticated() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_tokenKey);
-    return token != null && token.isNotEmpty;
+  // ============================================================
+  // Session Management
+  // ============================================================
+
+  /// Returns the current authentication state.
+  ///
+  /// authenticated: Laravel accepted the token.
+  /// unauthenticated: No token, or Laravel rejected it.
+  /// connectionError: Session could not be verified.
+  Future<AuthSessionStatus> checkSession() async {
+    final token = await getToken();
+
+    if (token == null || token.trim().isEmpty) {
+      return AuthSessionStatus.unauthenticated;
+    }
+
+    try {
+      final response = await _dio.get<dynamic>(
+        '/user',
+        options: Options(
+          headers: {'Authorization': 'Bearer $token'},
+          validateStatus: (status) => status != null && status < 500,
+        ),
+      );
+
+      final statusCode = response.statusCode;
+
+      if (statusCode == 200) {
+        return AuthSessionStatus.authenticated;
+      }
+
+      if (statusCode == 401) {
+        await _removeTokenIfUnchanged(token);
+
+        if (kDebugMode) {
+          debugPrint('Authentication session rejected by server');
+        }
+
+        return AuthSessionStatus.unauthenticated;
+      }
+
+      if (kDebugMode) {
+        debugPrint('Session verification returned status: $statusCode');
+      }
+
+      return AuthSessionStatus.connectionError;
+    } on DioException {
+      if (kDebugMode) {
+        debugPrint('Session verification request failed');
+      }
+
+      return AuthSessionStatus.connectionError;
+    } catch (_) {
+      if (kDebugMode) {
+        debugPrint('Unexpected session verification failure');
+      }
+
+      return AuthSessionStatus.connectionError;
+    }
   }
 
-  /// جلب التوكن الحالي
+  /// Backward-compatible method.
+  ///
+  /// A network error does not mean the token is invalid.
+  /// Use checkSession() when the UI needs to distinguish errors.
+  Future<bool> isAuthenticated() async {
+    final status = await checkSession();
+    return status == AuthSessionStatus.authenticated;
+  }
+
+  /// Returns the locally stored authentication token.
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_tokenKey);
   }
 
-  /// تسجيل الدخول وحفظ التوكن تلقائياً
+  Future<void> _saveToken(String token) async {
+    if (token.trim().isEmpty) {
+      throw const FormatException('Authentication token is empty');
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final saved = await prefs.setString(_tokenKey, token);
+
+    if (!saved) {
+      throw StateError('Could not persist authentication session');
+    }
+  }
+
+  /// Avoids deleting a newer token if a previous request finishes late.
+  Future<void> _removeTokenIfUnchanged(String expectedToken) async {
+    final prefs = await SharedPreferences.getInstance();
+    final currentToken = prefs.getString(_tokenKey);
+
+    if (currentToken == expectedToken) {
+      await prefs.remove(_tokenKey);
+    }
+  }
+
+  Map<String, dynamic> _parseResponse(dynamic responseData) {
+    if (responseData is Map) {
+      return Map<String, dynamic>.from(responseData);
+    }
+
+    throw const FormatException('Unexpected API response format');
+  }
+
+  String _extractToken(Map<String, dynamic> responseData) {
+    final nestedData = responseData['data'];
+
+    final dynamic token =
+        responseData['token'] ??
+        (nestedData is Map ? nestedData['token'] : null);
+
+    if (token is! String || token.trim().isEmpty) {
+      throw const FormatException(
+        'Authentication response does not contain a valid token',
+      );
+    }
+
+    return token;
+  }
+
+  /// Removes an old Authorization header from public auth requests.
+  ///
+  /// ApiClient's interceptor reads the token from SharedPreferences.
+  /// Therefore, login/register use a separate Dio instance without
+  /// the authentication interceptor.
+  Dio _createPublicAuthClient() {
+    return Dio(
+      BaseOptions(
+        baseUrl: _dio.options.baseUrl,
+        connectTimeout: _dio.options.connectTimeout,
+        receiveTimeout: _dio.options.receiveTimeout,
+        sendTimeout: _dio.options.sendTimeout,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      ),
+    );
+  }
+
+  // ============================================================
+  // Login
+  // ============================================================
+
   Future<Map<String, dynamic>> login({
     required String email,
     required String password,
   }) async {
+    final publicDio = _createPublicAuthClient();
+
     try {
-      final response = await _dio.post(
+      final response = await publicDio.post<dynamic>(
         '/login',
-        data: {'email': email, 'password': password},
+        data: {'email': email.trim(), 'password': password},
       );
 
-      // التعامل بمرونة سواء كانت البيانات داخل data أو مباشرة في الجذر
-      final resData = response.data is Map<String, dynamic>
-          ? response.data
-          : {};
-      final dynamic token = resData['token'] ?? resData['data']?['token'];
+      final responseData = _parseResponse(response.data);
+      final token = _extractToken(responseData);
 
-      if (token != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_tokenKey, token.toString());
-        debugPrint('✅ تم حفظ التوكن بنجاح: $token');
+      await _saveToken(token);
+
+      if (kDebugMode) {
+        debugPrint('Login successful');
       }
 
-      return Map<String, dynamic>.from(resData);
-    } catch (e) {
-      debugPrint('⚠️ خطأ في تسجيل الدخول: $e');
+      return responseData;
+    } on DioException {
+      if (kDebugMode) {
+        debugPrint('Login request failed');
+      }
       rethrow;
+    } finally {
+      publicDio.close();
     }
   }
 
-  /// إنشاء حساب جديد
+  // ============================================================
+  // Registration
+  // ============================================================
+
   Future<Map<String, dynamic>> register({
     required String name,
     required String email,
     required String password,
     required String passwordConfirmation,
   }) async {
+    final publicDio = _createPublicAuthClient();
+
     try {
-      final response = await _dio.post(
+      final response = await publicDio.post<dynamic>(
         '/register',
         data: {
-          'name': name,
-          'email': email,
+          'name': name.trim(),
+          'email': email.trim(),
           'password': password,
           'password_confirmation': passwordConfirmation,
         },
       );
 
-      final resData = response.data is Map<String, dynamic>
-          ? response.data
-          : {};
-      final dynamic token = resData['token'] ?? resData['data']?['token'];
+      final responseData = _parseResponse(response.data);
+      final token = _extractToken(responseData);
 
-      if (token != null) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_tokenKey, token.toString());
-        debugPrint('✅ تم حفظ التوكن الجديد بعد التسجيل: $token');
+      await _saveToken(token);
+
+      if (kDebugMode) {
+        debugPrint('Registration successful');
       }
 
-      return Map<String, dynamic>.from(resData);
-    } catch (e) {
-      debugPrint('⚠️ خطأ في إنشاء الحساب: $e');
+      return responseData;
+    } on DioException {
+      if (kDebugMode) {
+        debugPrint('Registration request failed');
+      }
       rethrow;
+    } finally {
+      publicDio.close();
     }
   }
 
-  /// رفع وتحديث الصورة الشخصية (Avatar)
+  // ============================================================
+  // Avatar Upload
+  // ============================================================
+
+  /// File-based upload for platforms supporting dart:io.
+  ///
+  /// Flutter Web should use MultipartFile.fromBytes instead.
   Future<String?> uploadAvatar(File imageFile) async {
     try {
-      final token = await getToken();
-      final fileName = imageFile.path.split(Platform.pathSeparator).last;
+      final fileName = imageFile.uri.pathSegments.last;
 
       final formData = FormData.fromMap({
         'avatar': await MultipartFile.fromFile(
@@ -100,64 +255,83 @@ class LaravelAuthRepository {
         ),
       });
 
-      final response = await _dio.post(
-        '/user/avatar',
-        data: formData,
-        options: Options(
-          headers: {
-            if (token != null) 'Authorization': 'Bearer $token',
-            'Accept': 'application/json',
-          },
-        ),
-      );
+      final response = await _dio.post<dynamic>('/user/avatar', data: formData);
 
-      final resData = response.data;
-      final avatarUrl = resData['avatar_url'] ?? resData['data']?['avatar_url'];
-      debugPrint('✅ تم رفع الصورة بنجاح: $avatarUrl');
-      return avatarUrl?.toString();
-    } catch (e) {
-      debugPrint('⚠️ خطأ أثناء رفع الصورة الشخصية: $e');
+      final responseData = _parseResponse(response.data);
+      final nestedData = responseData['data'];
+
+      final dynamic avatarUrl =
+          responseData['avatar_url'] ??
+          (nestedData is Map ? nestedData['avatar_url'] : null);
+
+      if (kDebugMode) {
+        debugPrint('Avatar upload completed');
+      }
+
+      return avatarUrl is String && avatarUrl.isNotEmpty ? avatarUrl : null;
+    } on DioException {
+      if (kDebugMode) {
+        debugPrint('Avatar upload request failed');
+      }
       rethrow;
     }
   }
 
-  /// تحديث اسم المستخدم
+  // ============================================================
+  // Profile Update
+  // ============================================================
+
   Future<void> updateProfileName(String newName) async {
+    final name = newName.trim();
+
+    if (name.isEmpty) {
+      throw ArgumentError('Profile name cannot be empty');
+    }
+
     try {
-      final token = await getToken();
-      await _dio.put(
-        '/user/profile',
-        data: {'name': newName},
-        options: Options(
-          headers: {
-            if (token != null) 'Authorization': 'Bearer $token',
-            'Accept': 'application/json',
-          },
-        ),
-      );
-      debugPrint('✅ تم تحديث الاسم بنجاح');
-    } catch (e) {
-      debugPrint('⚠️ خطأ أثناء تحديث الملف الشخصي: $e');
+      await _dio.put<dynamic>('/user/profile', data: {'name': name});
+
+      if (kDebugMode) {
+        debugPrint('Profile name updated');
+      }
+    } on DioException {
+      if (kDebugMode) {
+        debugPrint('Profile update request failed');
+      }
       rethrow;
     }
   }
 
-  /// تسجيل الخروج ومسح التوكن
+  // ============================================================
+  // Logout
+  // ============================================================
+
+  /// Attempts to revoke the token on Laravel.
+  ///
+  /// Local token is cleared even if the server cannot be reached.
+  /// A failed server request may leave the remote token valid.
   Future<void> logout() async {
+    final token = await getToken();
+
     try {
-      final token = await getToken();
-      await _dio.post(
-        '/logout',
-        options: Options(
-          headers: {if (token != null) 'Authorization': 'Bearer $token'},
-        ),
-      );
-    } catch (e) {
-      debugPrint('⚠️ تعذر إشعار السيرفر بتسجيل الخروج: $e');
+      if (token != null && token.isNotEmpty) {
+        await _dio.post<dynamic>(
+          '/logout',
+          options: Options(headers: {'Authorization': 'Bearer $token'}),
+        );
+      }
+    } on DioException {
+      if (kDebugMode) {
+        debugPrint('Server logout request failed');
+      }
     } finally {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_tokenKey);
-      debugPrint('🗑️ تم مسح التوكن محلياً');
+      if (token != null) {
+        await _removeTokenIfUnchanged(token);
+      }
+
+      if (kDebugMode) {
+        debugPrint('Local logout completed');
+      }
     }
   }
 }

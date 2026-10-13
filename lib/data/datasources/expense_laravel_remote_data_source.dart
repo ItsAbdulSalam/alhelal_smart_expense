@@ -12,7 +12,6 @@ class ExpenseLaravelRemoteDataSource {
     final response = await dio.get('/expenses');
 
     // 🔍 طباعة الرد الخام القادم من سيرفر Laravel لمعاينة الحقول ومسار الصورة
-    print("RAW EXPENSES FROM API: ${response.data}");
 
     final raw = response.data;
     if (raw == null) return [];
@@ -40,7 +39,6 @@ class ExpenseLaravelRemoteDataSource {
   /// إنشاء مصروف جديد (يدعم FormData لرفع الصور أو Map عادي)
   Future<Map<String, dynamic>> createExpense(dynamic data) async {
     final response = await dio.post('/expenses', data: data);
-    print("CREATE EXPENSE RESPONSE: ${response.data}");
 
     final raw = response.data;
     if (raw is Map && raw.containsKey('data')) {

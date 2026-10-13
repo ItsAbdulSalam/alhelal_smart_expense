@@ -262,7 +262,6 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
               ? null
               : _notesController.text.trim(),
           'receipt_image': multipartImage,
-          'receipt_image_path': _pickedImage!.path,
         });
       } else {
         payload = {

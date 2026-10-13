@@ -10,13 +10,12 @@ import 'core/services/local_expense_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
 import 'core/utils/locale_controller.dart';
-import 'data/datasources/expense_laravel_remote_data_source.dart';
 import 'data/repositories/laravel_auth_repository.dart';
-import 'data/repositories/laravel_expense_repository.dart';
 import 'l10n/app_localizations.dart';
 import 'presentation/screens/auth_screen.dart';
 import 'presentation/screens/dashboard_loader.dart';
 import 'presentation/widgets/connectivity_banner.dart';
+import 'presentation/screens/session_retry_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,26 +54,15 @@ void main() async {
     await LocalExpenseService.initQueueBox();
   }
 
-  // 5. اختبار الاتصال وجلب البيانات من Laravel
-  try {
-    final laravelRepo = LaravelExpenseRepository(
-      ExpenseLaravelRemoteDataSource(dio: ApiClient.dio),
-    );
-    final expenses = await laravelRepo.getExpenses();
-    debugPrint(
-      '🎉 LARAVEL API SUCCESS: تم جلب ${expenses.length} مصاريف بنجاح!',
-    );
-  } catch (e) {
-    debugPrint('❌ LARAVEL API ERROR: $e');
-  }
-
   // 6. تحديد الشاشة الأولى بناءً على توكن مصادقة Laravel
   final authRepo = LaravelAuthRepository();
-  final bool isLoggedIn = await authRepo.isAuthenticated();
+  final sessionStatus = await authRepo.checkSession();
 
-  final Widget initialScreen = isLoggedIn
-      ? const DashboardLoader()
-      : const AuthScreen();
+  final Widget initialScreen = switch (sessionStatus) {
+    AuthSessionStatus.authenticated => const DashboardLoader(),
+    AuthSessionStatus.unauthenticated => const AuthScreen(),
+    AuthSessionStatus.connectionError => const SessionRetryScreen(),
+  };
 
   runApp(
     MyApp(

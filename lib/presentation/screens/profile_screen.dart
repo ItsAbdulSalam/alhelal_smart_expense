@@ -5,52 +5,43 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/theme_controller.dart';
-
+import 'package:alhelal_smart_expense/core/services/authenticated_avatar_image.dart';
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
-
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
-
 class _ProfileScreenState extends State<ProfileScreen> {
   final ImagePicker _picker = ImagePicker();
-
   late final TextEditingController _nameController;
   bool _isEditing = false;
   bool _isSaving = false;
   bool _isUploadingAvatar = false;
   bool _isLoading = true;
-
   String _displayName = '';
   String _email = '';
   String? _avatarUrl;
   Uint8List? _localSelectedBytes; // لعرض الصورة المختارة محلياً وفوراً
-
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController();
     _loadUserProfile();
   }
-
   @override
   void dispose() {
     _nameController.dispose();
     super.dispose();
   }
-
   Future<void> _loadUserProfile() async {
     final prefs = await SharedPreferences.getInstance();
     final localEmail = prefs.getString('user_email') ?? '';
     final localName = prefs.getString('user_name') ?? '';
     final localAvatar = prefs.getString('user_avatar_url');
-
     try {
       final response = await ApiClient.dio.get('/user');
       if (response.data != null && mounted) {
         final data = response.data is Map ? response.data : {};
-
         final serverAvatar = (data['avatar_url'] ?? data['user']?['avatar_url'])
             ?.toString();
         final effectiveAvatar =
@@ -59,11 +50,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             : ((localAvatar != null && localAvatar.trim().isNotEmpty)
                   ? localAvatar
                   : null);
-
         if (serverAvatar != null && serverAvatar.trim().isNotEmpty) {
           await prefs.setString('user_avatar_url', serverAvatar);
         }
-
         setState(() {
           _displayName =
               (data['name'] ?? (localName.isNotEmpty ? localName : 'المستخدم'))
@@ -89,7 +78,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     }
   }
-
   void _notify(String msg, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -123,10 +111,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
   }
-
   Future<void> _pickAndUploadAvatar() async {
     if (_isUploadingAvatar) return;
-
     try {
       final pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
@@ -134,30 +120,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
         maxWidth: 800,
         maxHeight: 800,
       );
-
       if (pickedFile == null) return;
-
       final bytes = await pickedFile.readAsBytes();
-
       setState(() {
         _isUploadingAvatar = true;
         _localSelectedBytes = bytes;
       });
-
       final formData = FormData.fromMap({
         'avatar': MultipartFile.fromBytes(bytes, filename: pickedFile.name),
       });
-
       final response = await ApiClient.dio.post('/user/avatar', data: formData);
-
       if (mounted) {
         final resData = response.data is Map ? response.data : {};
         final newUrl = (resData['avatar_url'] ?? resData['data']?['avatar_url'])
             ?.toString();
-
-        debugPrint('📸 Avatar Upload Response: ${response.data}');
         debugPrint('📸 Final URL: $newUrl');
-
         if (newUrl != null && newUrl.trim().isNotEmpty) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('user_avatar_url', newUrl);
@@ -178,7 +155,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) setState(() => _isUploadingAvatar = false);
     }
   }
-
   Future<void> _saveProfile() async {
     if (_isSaving) return;
     final name = _nameController.text.trim();
@@ -186,14 +162,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _notify('يرجى إدخال اسم صحيح لا يقل عن حرفين.', isError: true);
       return;
     }
-
     try {
       setState(() => _isSaving = true);
       await ApiClient.dio.put('/user/profile', data: {'name': name});
-
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_name', name);
-
       if (!mounted) return;
       setState(() {
         _displayName = name;
@@ -210,12 +183,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) setState(() => _isSaving = false);
     }
   }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-
     final scaffoldBg = isDark
         ? const Color(0xFF030712)
         : const Color(0xFFF8FAFC);
@@ -229,7 +200,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final subTextColor = isDark
         ? const Color(0xFF94A3B8)
         : const Color(0xFF64748B);
-
     if (_isLoading) {
       return Scaffold(
         backgroundColor: scaffoldBg,
@@ -238,7 +208,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       );
     }
-
     return Scaffold(
       backgroundColor: scaffoldBg,
       appBar: AppBar(
@@ -326,7 +295,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
   Widget _buildHeroBanner(
     bool isDark,
     Color cardBg,
@@ -464,7 +432,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
   Widget _buildAvatarImage() {
     if (_localSelectedBytes != null) {
       return Image.memory(
@@ -473,21 +440,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         errorBuilder: (_, _, _) => _fallbackAvatar(),
       );
     }
-
     if (_avatarUrl != null && _avatarUrl!.trim().isNotEmpty) {
-      return Image.network(
-        _avatarUrl!,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          debugPrint('❌ Image load error: $error on URL: $_avatarUrl');
-          return _fallbackAvatar();
-        },
+      return AuthenticatedAvatarImage(
+        avatarUrl: _avatarUrl,
+        fallback: _fallbackAvatar(),
       );
     }
-
     return _fallbackAvatar();
   }
-
   Widget _fallbackAvatar() {
     final char = _displayName.trim().isNotEmpty
         ? _displayName.trim()[0].toUpperCase()
@@ -503,7 +463,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
   Widget _buildSectionHeader(String title, String subtitle, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -527,7 +486,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ],
     );
   }
-
   Widget _buildInfoCard(
     Color cardBg,
     Color borderColor,
@@ -653,7 +611,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
   Widget _buildAppearanceCard(
     Color cardBg,
     Color borderColor,
@@ -700,7 +657,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
     );
   }
-
   Widget _themeOption({
     required String title,
     required IconData icon,
@@ -748,7 +704,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
   Widget _buildAccountStatusCard(
     Color cardBg,
     Color borderColor,
