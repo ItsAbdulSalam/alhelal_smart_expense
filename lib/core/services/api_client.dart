@@ -1,4 +1,3 @@
-// ignore: unnecessary_import
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,6 +7,7 @@ class ApiClient {
     'API_BASE_URL',
     defaultValue: 'https://api.alhelalsmart.com/api',
   );
+
   static late final Dio dio;
 
   static void init() {
@@ -22,58 +22,87 @@ class ApiClient {
         },
       ),
     );
+
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
           final prefs = await SharedPreferences.getInstance();
           final token = prefs.getString('auth_token');
-          if (token != null && token.isNotEmpty) {
+
+          if (token != null && token.trim().isNotEmpty) {
             options.headers['Authorization'] = 'Bearer $token';
           }
+
           if (kDebugMode) {
-            debugPrint('🚀 API Request: ${options.method} ${options.path}');
+            debugPrint('API Request: ${options.method} ${options.path}');
           }
+
           return handler.next(options);
         },
         onError: (DioException error, handler) {
           if (kDebugMode) {
             debugPrint(
-              '⚠️ API Error: ${error.response?.statusCode ?? 'No response'}',
+              'API Error: ${error.response?.statusCode ?? 'No response'}',
             );
           }
+
           return handler.next(error);
         },
       ),
     );
   }
 
+  static Future<String> _getAuthToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+
+    if (token == null || token.trim().isEmpty) {
+      throw StateError('Authentication token is missing');
+    }
+
+    return token;
+  }
+
   static Future<Uint8List> fetchReceiptImage(String expenseId) async {
+    final token = await _getAuthToken();
+
     final response = await dio.get<List<int>>(
       '/expenses/${Uri.encodeComponent(expenseId)}/receipt',
       options: Options(
         responseType: ResponseType.bytes,
-        headers: {'Accept': 'image/*, application/pdf'},
+        headers: {
+          'Accept': 'image/*, application/pdf',
+          'Authorization': 'Bearer $token',
+        },
       ),
     );
+
     final bytes = response.data;
+
     if (bytes == null || bytes.isEmpty) {
       throw StateError('Receipt image is empty');
     }
+
     return Uint8List.fromList(bytes);
   }
 
   static Future<Uint8List> fetchAvatarImage() async {
+    final token = await _getAuthToken();
+
     final response = await dio.get<List<int>>(
       '/user/avatar',
       options: Options(
         responseType: ResponseType.bytes,
-        headers: {'Accept': 'image/*'},
+        headers: {'Accept': 'image/*', 'Authorization': 'Bearer $token'},
       ),
     );
+
     final bytes = response.data;
+
     if (bytes == null || bytes.isEmpty) {
       throw StateError('Avatar image is empty');
     }
+
     return Uint8List.fromList(bytes);
   }
 }
