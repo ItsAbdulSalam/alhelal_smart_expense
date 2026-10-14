@@ -1365,7 +1365,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final localizations = AppLocalizations.of(context)!;
 
     // Adaptive export icon colors for Light & Dark Mode
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return [
       IconButton(
