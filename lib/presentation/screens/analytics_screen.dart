@@ -3,7 +3,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../../core/services/api_client.dart';
 
@@ -29,6 +28,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   Map<String, dynamic>? _aiAdviceData;
   String? _currentLoadedLocale;
   String? _aiAdviceError;
+  bool _hasLoadedAnalytics = false;
+  bool _analyticsStarted = false;
+  int _analyticsRequestId = 0;
+  int _aiRequestId = 0;
+  int _budgetRequestId = 0;
+  bool _isRefreshingAnalytics = false;
 
   @override
   void didChangeDependencies() {
@@ -36,42 +41,78 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     final currentLocale = Localizations.localeOf(context).languageCode;
     if (_currentLoadedLocale != currentLocale) {
       _currentLoadedLocale = currentLocale;
-      _fetchAnalytics();
+      if (!_analyticsStarted) {
+        _analyticsStarted = true;
+        _fetchAnalytics();
+      }
       _fetchAiAdvice(currentLocale);
     }
   }
 
+  // Only the summary controls the page-level loading/error state.
+  // Budget and AI failures stay local to their respective cards.
   Future<void> _fetchAnalytics() async {
+    final requestId = ++_analyticsRequestId;
     setState(() {
-      _isLoading = true;
+      _isLoading = !_hasLoadedAnalytics;
+      _isRefreshingAnalytics = _hasLoadedAnalytics;
       _errorMessage = null;
     });
 
     try {
-      final res = await ApiClient.dio.get('/analytics/summary');
-      if (mounted) {
-        final raw = res.data;
-        setState(() {
-          _data = (raw is Map && raw['data'] != null)
-              ? Map<String, dynamic>.from(raw['data'])
-              : (raw is Map ? Map<String, dynamic>.from(raw) : {});
-          _isLoading = false;
-        });
-        await _fetchBudget();
+      dynamic raw;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        try {
+          final res = await ApiClient.dio.get('/analytics/summary');
+          raw = res.data;
+          if (raw is! Map || raw['status'] != true || raw['data'] is! Map) {
+            throw const FormatException('Invalid analytics response');
+          }
+          break;
+        } catch (error) {
+          // A single short retry for transient failures; never retry malformed data.
+          if (error is FormatException || attempt == 1) rethrow;
+          if (!mounted || requestId != _analyticsRequestId) return;
+          await Future<void>.delayed(const Duration(milliseconds: 650));
+        }
       }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = Localizations.localeOf(context).languageCode == 'ar'
-              ? 'تعذر تحميل الإحصائيات، تأكد من الاتصال بالسيرفر'
-              : 'Failed to load analytics. Please check server connection.';
-          _isLoading = false;
-        });
+      if (!mounted || requestId != _analyticsRequestId) return;
+      setState(() {
+        _data = Map<String, dynamic>.from(raw['data'] as Map);
+        _isLoading = false;
+        _isRefreshingAnalytics = false;
+        _hasLoadedAnalytics = true;
+      });
+      // The budget is independent and must never block the summary.
+      _fetchBudget();
+    } catch (error) {
+      if (!mounted || requestId != _analyticsRequestId) return;
+      debugPrint('Analytics summary failed: $error');
+      setState(() {
+        _errorMessage = _hasLoadedAnalytics
+            ? null
+            : (Localizations.localeOf(context).languageCode == 'ar'
+                  ? 'تعذر تحميل الإحصائيات، تأكد من الاتصال بالسيرفر'
+                  : 'Failed to load analytics. Please check server connection.');
+        _isLoading = false;
+        _isRefreshingAnalytics = false;
+      });
+      if (_hasLoadedAnalytics) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              Localizations.localeOf(context).languageCode == 'ar'
+                  ? 'تعذر تحديث البيانات، يتم عرض آخر بيانات محمّلة.'
+                  : 'Could not refresh. Showing previously loaded data.',
+            ),
+          ),
+        );
       }
     }
   }
 
   Future<void> _fetchBudget() async {
+    final requestId = ++_budgetRequestId;
     if (!mounted) return;
     setState(() {
       _isLoadingBudget = true;
@@ -104,14 +145,14 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           break;
         }
       }
-      if (mounted) {
+      if (mounted && requestId == _budgetRequestId) {
         setState(() {
           _generalBudget = general;
           _isLoadingBudget = false;
         });
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && requestId == _budgetRequestId) {
         setState(() {
           _generalBudget = null;
           _isLoadingBudget = false;
@@ -123,6 +164,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   Future<void> _fetchAiAdvice([String? langCode]) async {
     final locale = langCode ?? Localizations.localeOf(context).languageCode;
+    final requestId = ++_aiRequestId;
     setState(() {
       _isLoadingAiAdvice = true;
       _aiAdviceError = null;
@@ -138,7 +180,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         'AI ADVISOR CACHED: ${res.data is Map ? res.data['cached'] : 'unknown'}',
       );
 
-      if (mounted && locale == _currentLoadedLocale) {
+      if (mounted &&
+          requestId == _aiRequestId &&
+          locale == _currentLoadedLocale) {
         final raw = res.data;
         setState(() {
           _aiAdviceData = (raw is Map && raw['data'] != null)
@@ -148,7 +192,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         });
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted &&
+          requestId == _aiRequestId &&
+          locale == _currentLoadedLocale) {
         setState(() {
           _aiAdviceError = locale == 'ar'
               ? 'تعذر تحديث التحليل. تحقق من الاتصال وحاول مجدداً.'
@@ -228,10 +274,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                     size: 20,
                     color: textSecondary,
                   ),
-                  onPressed: () {
-                    _fetchAnalytics();
-                    _fetchAiAdvice();
-                  },
+                  onPressed: _isRefreshingAnalytics
+                      ? null
+                      : () {
+                          _fetchAnalytics();
+                          _fetchAiAdvice();
+                        },
                 ),
               ),
             ],
@@ -277,8 +325,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               : RefreshIndicator(
                   color: const Color(0xFF4F46E5),
                   onRefresh: () async {
-                    await _fetchAnalytics();
-                    await _fetchAiAdvice();
+                    await Future.wait([_fetchAnalytics(), _fetchAiAdvice()]);
                   },
                   child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
@@ -1088,7 +1135,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               ? 'ارتفع الإنفاق في هذا التصنيف ${increase.toStringAsFixed(0)}% مقارنة بالشهر السابق.'
               : 'Spending in this category is up ${increase.toStringAsFixed(0)}% compared with last month.',
         ));
-        if (alerts.length >= 3) break;
+        if (alerts.length >= 3) {
+          break;
+        }
       }
     }
 
@@ -1669,14 +1718,32 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  String _monthLabel(String value, bool isArabic) {
-    try {
-      return DateFormat.MMM(
-        isArabic ? 'ar' : 'en',
-      ).format(DateTime.parse('$value-01'));
-    } catch (_) {
-      return value;
+  // Always normalize to a contiguous six-month window. A year is part of
+  // each key, so Oct 2025 and Oct 2026 never collapse into one bucket.
+  List<({String month, double total})> _normalizedMonthlyTrend() {
+    final raw = _data['monthly_trend'];
+    final totals = <String, double>{};
+    if (raw is List) {
+      for (final entry in raw) {
+        if (entry is! Map) continue;
+        final key = (entry['month'] ?? '').toString();
+        if (!RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(key)) continue;
+        final amount = entry['total'];
+        if (amount is num && amount.isFinite) {
+          totals[key] = (totals[key] ?? 0) + amount.toDouble();
+        }
+      }
     }
+    final key = (_data['current_month'] ?? '').toString();
+    final match = RegExp(r'^(\d{4})-(0[1-9]|1[0-2])$').firstMatch(key);
+    final end = match == null
+        ? DateTime(DateTime.now().year, DateTime.now().month)
+        : DateTime(int.parse(match.group(1)!), int.parse(match.group(2)!));
+    return List.generate(6, (i) {
+      final date = DateTime(end.year, end.month - 5 + i);
+      final month = DateFormat('yyyy-MM').format(date);
+      return (month: month, total: max(0.0, totals[month] ?? 0.0));
+    });
   }
 
   Widget _buildMonthlyTrendChart(
@@ -1687,35 +1754,47 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     Color textSecondary,
     bool isArabic,
   ) {
-    final rawTrend = _data['monthly_trend'] as List<dynamic>? ?? [];
-    final List<Map<String, dynamic>> trendData = rawTrend
-        .map((e) => Map<String, dynamic>.from(e as Map))
-        .toList();
-
-    double maxY = 100.0;
-    for (var item in trendData) {
-      final val = (item['total'] ?? 0.0) as num;
-      if (val > maxY) maxY = val.toDouble();
-    }
-    maxY = (maxY * 1.25).ceilToDouble();
+    final months = _normalizedMonthlyTrend();
+    final largest = months.fold<double>(0, (m, e) => max(m, e.total));
+    final hasData = largest > 0;
+    // Four readable grid intervals and a little headroom.
+    final magnitude = largest <= 0
+        ? 1.0
+        : pow(10, (log(largest / 4) / ln10).floor()).toDouble();
+    final target = largest / 4 / magnitude;
+    final nice = target <= 1
+        ? 1.0
+        : target <= 2
+        ? 2.0
+        : target <= 2.5
+        ? 2.5
+        : target <= 5
+        ? 5.0
+        : 10.0;
+    final interval = max(1.0, nice * magnitude);
+    final maxY = max(
+      4 * interval,
+      (largest / interval).ceil() * interval,
+    ).toDouble();
+    final currency = (_data['currency'] ?? 'TRY').toString();
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: borderColor),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(6),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4F46E5).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
+                  color: const Color(0xFF4F46E5).withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(11),
                 ),
                 child: const Icon(
                   Icons.bar_chart_rounded,
@@ -1724,49 +1803,79 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              Text(
-                isArabic ? 'مسار الإنفاق الشهري' : 'Monthly Spending Trend',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  color: textPrimary,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isArabic
+                          ? 'مسار الإنفاق الشهري'
+                          : 'Monthly Spending Trend',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      isArabic
+                          ? 'آخر 6 أشهر • $currency'
+                          : 'Last 6 months • $currency',
+                      style: TextStyle(fontSize: 11, color: textSecondary),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          trendData.isEmpty
-              ? Container(
-                  height: 120,
-                  alignment: Alignment.center,
-                  child: Text(
-                    isArabic
-                        ? 'لا توجد بيانات حركة مالية كافية للرسم'
-                        : 'No sufficient trend data available yet',
-                    style: TextStyle(color: textSecondary),
-                  ),
-                )
-              : SizedBox(
-                  height: 170,
+          const SizedBox(height: 22),
+          if (!hasData)
+            SizedBox(
+              height: 130,
+              child: Center(
+                child: Text(
+                  isArabic
+                      ? 'لا توجد مصروفات خلال الأشهر الستة الأخيرة'
+                      : 'No spending in the last six months',
+                  style: TextStyle(color: textSecondary, fontSize: 12),
+                ),
+              ),
+            )
+          else
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final compact = constraints.maxWidth < 480;
+                return SizedBox(
+                  height: compact ? 196 : 225,
                   child: Directionality(
                     textDirection: ui.TextDirection.ltr,
                     child: BarChart(
                       BarChartData(
+                        minY: 0,
                         maxY: maxY,
+                        alignment: BarChartAlignment.spaceEvenly,
+                        groupsSpace: compact ? 12 : 26,
                         barTouchData: BarTouchData(
+                          enabled: true,
                           touchTooltipData: BarTouchTooltipData(
-                            getTooltipColor: (group) => isDark
-                                ? const Color(0xFF1E293B)
-                                : const Color(0xFF0F172A),
+                            getTooltipColor: (_) => const Color(0xFF0F172A),
                             getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                              final month =
-                                  trendData[group.x.toInt()]['month'] ?? '';
+                              if (group.x < 0 || group.x >= months.length) {
+                                return null;
+                              }
+                              final item = months[group.x];
+                              final date = DateTime.parse('${item.month}-01');
+                              final label = DateFormat.yMMMM(
+                                isArabic ? 'ar' : 'en',
+                              ).format(date);
                               return BarTooltipItem(
-                                '${_monthLabel(month.toString(), isArabic)}\n${NumberFormat('#,##0.##').format(rod.toY)} ${_data['currency'] ?? 'TRY'}',
+                                '$label\n${NumberFormat('#,##0.##').format(item.total)} $currency',
                                 const TextStyle(
                                   color: Colors.white,
-                                  fontWeight: FontWeight.bold,
                                   fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.5,
                                 ),
                               );
                             },
@@ -1783,73 +1892,119 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           leftTitles: AxisTitles(
                             sideTitles: SideTitles(
                               showTitles: true,
-                              reservedSize:
-                                  !kIsWeb &&
-                                      MediaQuery.sizeOf(context).width < 600
-                                  ? 52
-                                  : 44,
-                              getTitlesWidget: (val, meta) => Text(
-                                NumberFormat.compact().format(val),
-                                style: TextStyle(
-                                  color: textSecondary,
-                                  fontSize: 10.5,
-                                ),
-                              ),
+                              reservedSize: compact ? 43 : 52,
+                              interval: interval,
+                              getTitlesWidget: (value, meta) {
+                                // Don't print a second label at the upper boundary.
+                                if (value < 0 ||
+                                    value > maxY ||
+                                    (value - maxY).abs() < 0.00001) {
+                                  return const SizedBox.shrink();
+                                }
+                                return SideTitleWidget(
+                                  meta: meta,
+                                  space: 6,
+                                  child: Text(
+                                    NumberFormat.compact(
+                                      locale: 'en',
+                                    ).format(value),
+                                    maxLines: 1,
+                                    style: TextStyle(
+                                      color: textSecondary,
+                                      fontSize: compact ? 9 : 10,
+                                    ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                           bottomTitles: AxisTitles(
                             sideTitles: SideTitles(
                               showTitles: true,
-                              getTitlesWidget: (val, meta) {
-                                final idx = val.toInt();
-                                if (idx >= 0 && idx < trendData.length) {
-                                  final label = (trendData[idx]['month'] ?? '')
-                                      .toString();
-                                  return Padding(
-                                    padding: const EdgeInsets.only(top: 8.0),
-                                    child: Text(
-                                      _monthLabel(label, isArabic),
-                                      style: TextStyle(
-                                        color: textSecondary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  );
+                              reservedSize: 40,
+                              interval: 1,
+                              getTitlesWidget: (value, meta) {
+                                final i = value.toInt();
+                                if (i < 0 ||
+                                    i >= months.length ||
+                                    value != i.toDouble()) {
+                                  return const SizedBox.shrink();
                                 }
-                                return const SizedBox();
+                                final date = DateTime.parse(
+                                  '${months[i].month}-01',
+                                );
+                                final label = DateFormat.MMM(
+                                  isArabic ? 'ar' : 'en',
+                                ).format(date);
+                                final isCurrent = i == months.length - 1;
+                                final showYear = date.month == 1;
+                                return SideTitleWidget(
+                                  meta: meta,
+                                  space: 8,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: isCurrent
+                                              ? const Color(0xFF6366F1)
+                                              : textSecondary,
+                                          fontSize: compact ? 9 : 11,
+                                          fontWeight: isCurrent
+                                              ? FontWeight.w900
+                                              : FontWeight.w600,
+                                        ),
+                                      ),
+                                      if (showYear)
+                                        Text(
+                                          '${date.year}',
+                                          style: TextStyle(
+                                            color: textSecondary,
+                                            fontSize: 8,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
                               },
                             ),
                           ),
                         ),
-                        borderData: FlBorderData(show: false),
                         gridData: FlGridData(
                           show: true,
                           drawVerticalLine: false,
+                          horizontalInterval: interval,
                           getDrawingHorizontalLine: (value) => FlLine(
-                            color: borderColor.withValues(alpha: 0.7),
+                            color: borderColor.withValues(
+                              alpha: isDark ? .5 : .8,
+                            ),
                             strokeWidth: 1,
+                            dashArray: [4, 4],
                           ),
                         ),
-                        barGroups: List.generate(trendData.length, (i) {
-                          final val = ((trendData[i]['total'] ?? 0.0) as num)
-                              .toDouble();
+                        borderData: FlBorderData(show: false),
+                        barGroups: List.generate(months.length, (i) {
+                          final value = months[i].total;
                           return BarChartGroupData(
                             x: i,
+                            barsSpace: 0,
                             barRods: [
                               BarChartRodData(
-                                toY: val,
+                                toY: value,
+                                width: compact ? 17 : 25,
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(6),
+                                ),
                                 gradient: const LinearGradient(
+                                  begin: Alignment.bottomCenter,
+                                  end: Alignment.topCenter,
                                   colors: [
                                     Color(0xFF4F46E5),
                                     Color(0xFF38BDF8),
                                   ],
-                                  begin: Alignment.bottomCenter,
-                                  end: Alignment.topCenter,
-                                ),
-                                width: trendData.length <= 3 ? 26 : 18,
-                                borderRadius: const BorderRadius.vertical(
-                                  top: Radius.circular(8),
                                 ),
                               ),
                             ],
@@ -1858,7 +2013,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                       ),
                     ),
                   ),
-                ),
+                );
+              },
+            ),
         ],
       ),
     );
