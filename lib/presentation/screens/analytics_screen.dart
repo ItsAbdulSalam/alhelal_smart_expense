@@ -1,7 +1,9 @@
 import 'dart:math';
 import 'dart:ui' as ui;
+import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import '../../core/services/api_client.dart';
 
@@ -14,12 +16,19 @@ class AnalyticsScreen extends StatefulWidget {
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   bool _isLoading = true;
+  bool _aiExpanded = false;
+  bool _insightsExpanded = false;
   String? _errorMessage;
   Map<String, dynamic> _data = {};
+
+  bool _isLoadingBudget = true;
+  String? _budgetError;
+  Map<String, dynamic>? _generalBudget;
 
   bool _isLoadingAiAdvice = false;
   Map<String, dynamic>? _aiAdviceData;
   String? _currentLoadedLocale;
+  String? _aiAdviceError;
 
   @override
   void didChangeDependencies() {
@@ -40,7 +49,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
     try {
       final res = await ApiClient.dio.get('/analytics/summary');
-      if (res.data != null && mounted) {
+      if (mounted) {
         final raw = res.data;
         setState(() {
           _data = (raw is Map && raw['data'] != null)
@@ -48,6 +57,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               : (raw is Map ? Map<String, dynamic>.from(raw) : {});
           _isLoading = false;
         });
+        await _fetchBudget();
       }
     } catch (e) {
       if (mounted) {
@@ -61,18 +71,74 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     }
   }
 
+  Future<void> _fetchBudget() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingBudget = true;
+      _budgetError = null;
+    });
+    try {
+      final month =
+          (_data['current_month'] ??
+                  DateFormat('yyyy-MM').format(DateTime.now()))
+              .toString();
+      final response = await ApiClient.dio.get(
+        '/budgets',
+        queryParameters: {'month_year': month},
+      );
+      final raw = response.data;
+      if (raw is! Map || raw['status'] != true || raw['data'] is! List) {
+        throw const FormatException('Invalid budgets response');
+      }
+      final budgets = (raw['data'] as List)
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+      final currency = (_data['currency'] ?? 'TRY').toString();
+      Map<String, dynamic>? general;
+      for (final budget in budgets) {
+        if (budget['category']?.toString().toLowerCase() == 'general' &&
+            budget['currency']?.toString().toUpperCase() ==
+                currency.toUpperCase()) {
+          general = budget;
+          break;
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _generalBudget = general;
+          _isLoadingBudget = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _generalBudget = null;
+          _isLoadingBudget = false;
+          _budgetError = 'unavailable';
+        });
+      }
+    }
+  }
+
   Future<void> _fetchAiAdvice([String? langCode]) async {
     final locale = langCode ?? Localizations.localeOf(context).languageCode;
     setState(() {
       _isLoadingAiAdvice = true;
+      _aiAdviceError = null;
     });
 
     try {
       final res = await ApiClient.dio.get(
         '/analytics/ai-advice',
+
         queryParameters: {'locale': locale},
       );
-      if (res.data != null && mounted) {
+      debugPrint(
+        'AI ADVISOR CACHED: ${res.data is Map ? res.data['cached'] : 'unknown'}',
+      );
+
+      if (mounted && locale == _currentLoadedLocale) {
         final raw = res.data;
         setState(() {
           _aiAdviceData = (raw is Map && raw['data'] != null)
@@ -84,6 +150,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     } catch (_) {
       if (mounted) {
         setState(() {
+          _aiAdviceError = locale == 'ar'
+              ? 'تعذر تحديث التحليل. تحقق من الاتصال وحاول مجدداً.'
+              : 'Unable to update insights. Check your connection and retry.';
           _isLoadingAiAdvice = false;
         });
       }
@@ -110,186 +179,229 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
     return Directionality(
       textDirection: isArabic ? ui.TextDirection.rtl : ui.TextDirection.ltr,
-      child: Scaffold(
-        backgroundColor: bg,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          centerTitle: false,
-          leading: IconButton(
-            icon: Icon(
-              isArabic
-                  ? Icons.arrow_back_ios_new_rounded
-                  : Icons.arrow_back_rounded,
-              size: 20,
-              color: textPrimary,
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+        child: Scaffold(
+          backgroundColor: bg,
+          appBar: AppBar(
+            systemOverlayStyle: isDark
+                ? SystemUiOverlayStyle.light
+                : SystemUiOverlayStyle.dark,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            centerTitle: false,
+            leading: IconButton(
+              icon: Icon(
+                isArabic
+                    ? Icons.arrow_back_ios_new_rounded
+                    : Icons.arrow_back_rounded,
+                size: 20,
+                color: textPrimary,
+              ),
+              onPressed: () => Navigator.of(context).pop(),
             ),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          title: Text(
-            isArabic ? 'التحليلات والرؤى المالية' : 'Analytics & Insights',
-            style: TextStyle(
-              color: textPrimary,
-              fontWeight: FontWeight.w900,
-              fontSize: 19,
-            ),
-          ),
-          actions: [
-            Container(
-              margin: const EdgeInsetsDirectional.only(end: 14),
-              child: IconButton(
-                tooltip: isArabic ? 'تحديث الكل' : 'Refresh All',
-                style: IconButton.styleFrom(
-                  backgroundColor: cardBg,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: borderColor),
-                  ),
-                ),
-                icon: Icon(
-                  Icons.refresh_rounded,
-                  size: 20,
-                  color: textSecondary,
-                ),
-                onPressed: () {
-                  _fetchAnalytics();
-                  _fetchAiAdvice();
-                },
+            title: Text(
+              isArabic ? 'التحليلات والرؤى المالية' : 'Analytics & Insights',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: textPrimary,
+                fontWeight: FontWeight.w900,
+                fontSize: 19,
               ),
             ),
-          ],
-        ),
-        body: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFF4F46E5)),
-              )
-            : _errorMessage != null
-            ? Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.error_outline_rounded,
-                      size: 48,
-                      color: Colors.redAccent.shade200,
+            actions: [
+              Container(
+                margin: const EdgeInsetsDirectional.only(end: 14),
+                child: IconButton(
+                  tooltip: isArabic ? 'تحديث الكل' : 'Refresh All',
+                  style: IconButton.styleFrom(
+                    backgroundColor: cardBg,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: borderColor),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _errorMessage!,
-                      style: TextStyle(color: textSecondary),
+                  ),
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    size: 20,
+                    color: textSecondary,
+                  ),
+                  onPressed: () {
+                    _fetchAnalytics();
+                    _fetchAiAdvice();
+                  },
+                ),
+              ),
+            ],
+          ),
+          body: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF4F46E5)),
+                )
+              : _errorMessage != null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline_rounded,
+                        size: 48,
+                        color: Colors.redAccent.shade200,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _errorMessage!,
+                        style: TextStyle(color: textSecondary),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4F46E5),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () {
+                          _fetchAnalytics();
+                          _fetchAiAdvice();
+                        },
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: Text(isArabic ? 'إعادة المحاولة' : 'Try Again'),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  color: const Color(0xFF4F46E5),
+                  onRefresh: () async {
+                    await _fetchAnalytics();
+                    await _fetchAiAdvice();
+                  },
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
                     ),
-                    const SizedBox(height: 16),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4F46E5),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1040),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildHeroOverviewCard(isArabic),
+                            const SizedBox(height: 12),
+                            _buildKpiGrid(
+                              cardBg,
+                              borderColor,
+                              textPrimary,
+                              textSecondary,
+                              isArabic,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildBudgetHealthCard(
+                              isDark,
+                              cardBg,
+                              borderColor,
+                              textPrimary,
+                              textSecondary,
+                              isArabic,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildSpendingInsightsCard(
+                              isDark,
+                              cardBg,
+                              borderColor,
+                              textPrimary,
+                              textSecondary,
+                              isArabic,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildSmartAlertsCard(
+                              isDark,
+                              cardBg,
+                              borderColor,
+                              textPrimary,
+                              textSecondary,
+                              isArabic,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildAiAdvisorCard(
+                              isDark,
+                              cardBg,
+                              borderColor,
+                              textPrimary,
+                              textSecondary,
+                              isArabic,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildMonthlyTrendChart(
+                              isDark,
+                              cardBg,
+                              borderColor,
+                              textPrimary,
+                              textSecondary,
+                              isArabic,
+                            ),
+                            const SizedBox(height: 12),
+                            _buildTopMerchantsCard(
+                              cardBg,
+                              borderColor,
+                              textPrimary,
+                              textSecondary,
+                              isArabic,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                         ),
                       ),
-                      onPressed: () {
-                        _fetchAnalytics();
-                        _fetchAiAdvice();
-                      },
-                      icon: const Icon(Icons.refresh_rounded, size: 18),
-                      label: Text(isArabic ? 'إعادة المحاولة' : 'Try Again'),
-                    ),
-                  ],
-                ),
-              )
-            : RefreshIndicator(
-                color: const Color(0xFF4F46E5),
-                onRefresh: () async {
-                  await _fetchAnalytics();
-                  await _fetchAiAdvice();
-                },
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 16,
-                  ),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1040),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildHeroOverviewCard(isArabic),
-                          const SizedBox(height: 20),
-                          _buildAiAdvisorCard(
-                            isDark,
-                            cardBg,
-                            borderColor,
-                            textPrimary,
-                            textSecondary,
-                            isArabic,
-                          ),
-                          const SizedBox(height: 20),
-                          _buildKpiGrid(
-                            cardBg,
-                            borderColor,
-                            textPrimary,
-                            textSecondary,
-                            isArabic,
-                          ),
-                          const SizedBox(height: 24),
-                          _buildMonthlyTrendChart(
-                            isDark,
-                            cardBg,
-                            borderColor,
-                            textPrimary,
-                            textSecondary,
-                            isArabic,
-                          ),
-                          const SizedBox(height: 24),
-                          _buildTopMerchantsCard(
-                            cardBg,
-                            borderColor,
-                            textPrimary,
-                            textSecondary,
-                            isArabic,
-                          ),
-                          const SizedBox(height: 40),
-                        ],
-                      ),
                     ),
                   ),
                 ),
-              ),
+        ),
       ),
     );
   }
 
   Widget _buildHeroOverviewCard(bool isArabic) {
-    final currentMonthTotal = (_data['current_month_total'] ?? 0.0) as num;
-    final lastMonthTotal = (_data['last_month_total'] ?? 0.0) as num;
+    final current = (_data['current_month_total'] as num?) ?? 0;
+    final previous = (_data['last_month_total'] as num?) ?? 0;
     final currency = (_data['currency'] ?? 'TRY').toString();
-
-    double diffPercent = 0.0;
-    bool isIncreased = false;
-    if (lastMonthTotal > 0) {
-      final diff = currentMonthTotal - lastMonthTotal;
-      diffPercent = (diff / lastMonthTotal * 100).abs();
-      isIncreased = diff > 0;
-    }
-
+    final difference = current - previous;
+    final hasComparison = previous > 0;
+    final isUp = difference > 0;
+    final isFlat = difference == 0;
+    final percent = hasComparison ? (difference.abs() / previous * 100) : 0.0;
+    final changeText = !hasComparison
+        ? (isArabic ? 'لا توجد بيانات للمقارنة' : 'No previous month data')
+        : isFlat
+        ? (isArabic ? 'دون تغيير عن الشهر الماضي' : 'Unchanged from last month')
+        : isArabic
+        ? '${isUp ? 'ارتفاع' : 'انخفاض'} ${percent.toStringAsFixed(1)}% عن الشهر الماضي'
+        : '${isUp ? 'Up' : 'Down'} ${percent.toStringAsFixed(1)}% vs last month';
+    final trendColor = !hasComparison || isFlat
+        ? Colors.white
+        : isUp
+        ? const Color(0xFFFFC5C5)
+        : const Color(0xFFA7F3D0);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(26),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         gradient: const LinearGradient(
           begin: Alignment.topRight,
           end: Alignment.bottomLeft,
-          colors: [Color(0xFF2E2A72), Color(0xFF4338CA), Color(0xFF4F46E5)],
+          colors: [Color(0xFF29256C), Color(0xFF4338CA), Color(0xFF5B4CF2)],
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4338CA).withValues(alpha: 0.28),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+            color: const Color(0xFF4338CA).withValues(alpha: 0.18),
+            blurRadius: 28,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -297,94 +409,810 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                isArabic
-                    ? 'إجمالي نفقات الشهر الحالي'
-                    : 'Current Month Spending',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: Colors.white,
+                  size: 20,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.2),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isArabic ? 'إنفاق الشهر الحالي' : 'This month’s spending',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isIncreased
-                          ? Icons.trending_up_rounded
-                          : Icons.trending_down_rounded,
-                      color: isIncreased
-                          ? const Color(0xFFFCA5A5)
-                          : const Color(0xFF86EFAC),
-                      size: 16,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerStart,
+            child: Directionality(
+              textDirection: ui.TextDirection.ltr,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    NumberFormat('#,##0.00').format(current),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 34,
+                      height: 1.1,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -1,
                     ),
-                    const SizedBox(width: 6),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    currency,
+                    style: const TextStyle(
+                      color: Color(0xFFDDD9FF),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.13)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  !hasComparison || isFlat
+                      ? Icons.remove_rounded
+                      : isUp
+                      ? Icons.trending_up_rounded
+                      : Icons.trending_down_rounded,
+                  color: trendColor,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    changeText,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 9),
+          Text(
+            isArabic
+                ? 'الشهر السابق: ${NumberFormat('#,##0.00').format(previous)} $currency'
+                : 'Previous month: ${NumberFormat('#,##0.00').format(previous)} $currency',
+            style: const TextStyle(color: Color(0xFFDCD9FA), fontSize: 12.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBudgetHealthCard(
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color textPrimary,
+    Color textSecondary,
+    bool isArabic,
+  ) {
+    const accent = Color(0xFF6366F1);
+    final budget = _generalBudget;
+    final limit = (budget?['amount'] as num?)?.toDouble() ?? 0;
+    final spent = (budget?['spent'] as num?)?.toDouble() ?? 0;
+    final remaining = (limit - spent).clamp(0.0, double.infinity).toDouble();
+    final percent = limit > 0 ? spent / limit * 100 : 0.0;
+    final currency =
+        budget?['currency']?.toString() ??
+        (_data['currency'] ?? 'TRY').toString();
+    final month =
+        (_data['current_month'] ?? DateFormat('yyyy-MM').format(DateTime.now()))
+            .toString();
+    final now = DateTime.now();
+    final currentMonth = DateFormat('yyyy-MM').format(now) == month;
+    final elapsed = now.day / DateTime(now.year, now.month + 1, 0).day * 100;
+    final isOver = percent >= 100;
+    final isWarning = percent >= 80;
+    final statusColor = isOver
+        ? const Color(0xFFDC2626)
+        : isWarning
+        ? const Color(0xFFD97706)
+        : const Color(0xFF059669);
+    final status = isOver
+        ? (isArabic ? 'تجاوزت الميزانية' : 'Over budget')
+        : isWarning
+        ? (isArabic ? 'قريب من الحد' : 'Near the limit')
+        : (isArabic ? 'ضمن الميزانية' : 'Within budget');
+    String money(double value) =>
+        '${NumberFormat('#,##0.##').format(value)} $currency';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.035),
+            blurRadius: 20,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: const Icon(
+                  Icons.health_and_safety_outlined,
+                  color: accent,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isArabic ? 'صحة الميزانية' : 'Budget Health',
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              if (budget != null && limit > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    status,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          if (_isLoadingBudget)
+            const LinearProgressIndicator(color: accent, minHeight: 3)
+          else if (_budgetError != null)
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    isArabic
+                        ? 'تعذر تحميل الميزانية من الخادم.'
+                        : 'Could not load budget from server.',
+                    style: TextStyle(color: textSecondary, fontSize: 12),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _fetchBudget,
+                  child: Text(isArabic ? 'إعادة المحاولة' : 'Retry'),
+                ),
+              ],
+            )
+          else if (budget == null || limit <= 0)
+            Text(
+              isArabic
+                  ? 'لا توجد ميزانية عامة لهذا الشهر. يمكنك إعدادها من لوحة التحكم.'
+                  : 'No general budget for this month. Set one from the dashboard.',
+              style: TextStyle(color: textSecondary, fontSize: 12.5),
+            )
+          else ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    isArabic
+                        ? 'المصروف: ${money(spent)}'
+                        : 'Spent: ${money(spent)}',
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${percent.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    color: statusColor,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 9),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: (percent / 100).clamp(0.0, 1.0).toDouble(),
+                minHeight: 9,
+                backgroundColor: borderColor,
+                valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    isArabic
+                        ? 'المتبقي: ${money(remaining)}'
+                        : 'Remaining: ${money(remaining)}',
+                    style: TextStyle(color: textSecondary, fontSize: 12),
+                  ),
+                ),
+                if (isOver)
+                  Text(
+                    isArabic
+                        ? 'التجاوز: ${money(spent - limit)}'
+                        : 'Over by: ${money(spent - limit)}',
+                    style: const TextStyle(
+                      color: Color(0xFFDC2626),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                    ),
+                  ),
+              ],
+            ),
+            if (currentMonth) ...[
+              const SizedBox(height: 9),
+              Text(
+                isArabic
+                    ? 'انقضى ${elapsed.toStringAsFixed(0)}% من الشهر، واستهلكت ${percent.toStringAsFixed(1)}% من الميزانية.'
+                    : '${elapsed.toStringAsFixed(0)}% of the month has passed; ${percent.toStringAsFixed(1)}% of your budget is used.',
+                style: TextStyle(color: textSecondary, fontSize: 11.5),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpendingInsightsCard(
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color textPrimary,
+    Color textSecondary,
+    bool isArabic,
+  ) {
+    const accent = Color(0xFF6366F1);
+    const palette = [
+      Color(0xFF6366F1),
+      Color(0xFF06B6D4),
+      Color(0xFF10B981),
+      Color(0xFFF59E0B),
+      Color(0xFFEC4899),
+      Color(0xFF8B5CF6),
+    ];
+    final raw = _data['spending_categories'];
+    final categories = raw is List
+        ? raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+        : <Map<String, dynamic>>[];
+    final total = (_data['current_month_total'] as num?)?.toDouble() ?? 0;
+    final currency = (_data['currency'] ?? 'TRY').toString();
+    final visible = _insightsExpanded
+        ? categories
+        : categories.take(3).toList();
+    final moneyFormat = NumberFormat('#,##0.##');
+
+    String nameFor(String name) {
+      if (name.trim().isEmpty || name == 'Uncategorized') {
+        return isArabic ? 'غير مصنف' : 'Uncategorized';
+      }
+      return name;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.035),
+            blurRadius: 20,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.donut_small_rounded,
+                  color: accent,
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      lastMonthTotal > 0
-                          ? (isArabic
-                                ? '${diffPercent.toStringAsFixed(1)}% عن الشهر الماضي'
-                                : '${diffPercent.toStringAsFixed(1)}% vs Last Month')
-                          : (isArabic ? 'بداية المقارنة' : 'Base Period'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.bold,
+                      isArabic ? 'رؤى الإنفاق' : 'Spending Insights',
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
                       ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      isArabic
+                          ? 'توزيع المصروفات حسب التصنيف'
+                          : 'Where your money goes',
+                      style: TextStyle(color: textSecondary, fontSize: 11.5),
                     ),
                   ],
                 ),
               ),
+              if (categories.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${categories.length} ${isArabic ? 'تصنيفات' : 'categories'}',
+                    style: const TextStyle(
+                      color: accent,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
             ],
           ),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                NumberFormat('#,##0.00').format(currentMonthTotal),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 36,
-                  fontWeight: FontWeight.w900,
+          const SizedBox(height: 16),
+          if (raw == null)
+            Text(
+              isArabic
+                  ? 'بيانات التصنيفات غير متاحة. حدّث Laravel للحصول على رؤى الإنفاق.'
+                  : 'Category data unavailable. Update Laravel to enable insights.',
+              style: TextStyle(color: textSecondary, fontSize: 12.5),
+            )
+          else if (categories.isEmpty || total <= 0)
+            Text(
+              isArabic
+                  ? 'لا توجد مصروفات مصنفة لهذا الشهر بعد.'
+                  : 'No spending categories recorded this month yet.',
+              style: TextStyle(color: textSecondary, fontSize: 12.5),
+            )
+          else ...[
+            ...visible.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+              final amount = (item['total'] as num?)?.toDouble() ?? 0;
+              final share = (amount / total * 100).clamp(0.0, 100.0).toDouble();
+              final previous =
+                  (item['previous_month_total'] as num?)?.toDouble() ?? 0;
+              final color = palette[index % palette.length];
+              final category = nameFor((item['category'] ?? '').toString());
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 15),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            category,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: textPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${moneyFormat.format(amount)} $currency',
+                          textDirection: ui.TextDirection.ltr,
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: share / 100,
+                        minHeight: 7,
+                        backgroundColor: borderColor,
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${share.toStringAsFixed(1)}% ${isArabic ? 'من إجمالي الإنفاق' : 'of monthly spending'}',
+                            style: TextStyle(
+                              color: textSecondary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                        if (previous > 0)
+                          Text(
+                            '${amount >= previous ? '+' : ''}${((amount - previous) / previous * 100).toStringAsFixed(1)}% ${isArabic ? 'عن السابق' : 'vs prev.'}',
+                            style: TextStyle(
+                              color: amount > previous
+                                  ? const Color(0xFFDC2626)
+                                  : amount < previous
+                                  ? const Color(0xFF059669)
+                                  : textSecondary,
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
+            if (categories.length > 3)
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton.icon(
+                  onPressed: () =>
+                      setState(() => _insightsExpanded = !_insightsExpanded),
+                  icon: Icon(
+                    _insightsExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 19,
+                  ),
+                  label: Text(
+                    _insightsExpanded
+                        ? (isArabic ? 'عرض أقل' : 'Show less')
+                        : (isArabic
+                              ? 'عرض جميع التصنيفات'
+                              : 'View all categories'),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: accent,
+                    textStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                currency,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: isDark ? 0.14 : 0.055),
+                borderRadius: BorderRadius.circular(14),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            isArabic
-                ? 'إنفاق الشهر السابق: ${NumberFormat('#,##0.00').format(lastMonthTotal)} $currency'
-                : 'Previous Month: ${NumberFormat('#,##0.00').format(lastMonthTotal)} $currency',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.75),
-              fontSize: 12.5,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.lightbulb_outline_rounded,
+                    color: accent,
+                    size: 19,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      isArabic
+                          ? 'أعلى تصنيف هو ${nameFor((categories.first['category'] ?? '').toString())} ويمثل ${(((categories.first['total'] as num?)?.toDouble() ?? 0) / total * 100).toStringAsFixed(1)}% من إنفاق هذا الشهر.'
+                          : 'Your top category is ${nameFor((categories.first['category'] ?? '').toString())}, accounting for ${((((categories.first['total'] as num?)?.toDouble() ?? 0) / total) * 100).toStringAsFixed(1)}% of this month’s spending.',
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 12,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmartAlertsCard(
+    bool isDark,
+    Color cardBg,
+    Color borderColor,
+    Color textPrimary,
+    Color textSecondary,
+    bool isArabic,
+  ) {
+    final alerts =
+        <({IconData icon, Color color, String title, String detail})>[];
+    final budget = _generalBudget;
+    final month = (_data['current_month'] ?? '').toString();
+    final now = DateTime.now();
+    final isCurrentMonth = month == DateFormat('yyyy-MM').format(now);
+    final currency = (_data['currency'] ?? 'TRY').toString();
+    final amountFormat = NumberFormat('#,##0.##');
+    final spent = (budget?['spent'] as num?)?.toDouble() ?? 0;
+    final limit = (budget?['amount'] as num?)?.toDouble() ?? 0;
+
+    if (budget != null && limit > 0) {
+      final percent = spent / limit * 100;
+      if (percent >= 100) {
+        final over = spent - limit;
+        alerts.add((
+          icon: Icons.error_outline_rounded,
+          color: const Color(0xFFDC2626),
+          title: isArabic ? 'تجاوزت الميزانية' : 'Budget exceeded',
+          detail: isArabic
+              ? 'تجاوزت الحد الشهري بمقدار ${amountFormat.format(over)} $currency.'
+              : 'You exceeded the monthly limit by ${amountFormat.format(over)} $currency.',
+        ));
+      } else if (percent >= 80) {
+        alerts.add((
+          icon: Icons.warning_amber_rounded,
+          color: const Color(0xFFD97706),
+          title: isArabic
+              ? 'اقتربت من حد الميزانية'
+              : 'Approaching your budget',
+          detail: isArabic
+              ? 'استهلكت ${percent.toStringAsFixed(1)}% من الميزانية، والمتبقي ${amountFormat.format(limit - spent)} $currency.'
+              : 'You used ${percent.toStringAsFixed(1)}% of your budget; ${amountFormat.format(limit - spent)} $currency remains.',
+        ));
+      } else if (isCurrentMonth && now.day >= 7) {
+        final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
+        final timeShare = now.day / daysInMonth;
+        final spendingShare = spent / limit;
+        // Compare spending pace with elapsed time, not just the 80% threshold.
+        if (spendingShare > timeShare * 1.3 &&
+            spendingShare - timeShare >= 0.10) {
+          alerts.add((
+            icon: Icons.speed_rounded,
+            color: const Color(0xFFD97706),
+            title: isArabic
+                ? 'الإنفاق أسرع من وتيرة الشهر'
+                : 'Spending ahead of pace',
+            detail: isArabic
+                ? 'استهلكت ${percent.toStringAsFixed(1)}% من الميزانية بعد انقضاء ${(timeShare * 100).toStringAsFixed(0)}% من الشهر.'
+                : 'You used ${percent.toStringAsFixed(1)}% of the budget with ${(timeShare * 100).toStringAsFixed(0)}% of the month elapsed.',
+          ));
+        }
+      }
+    }
+
+    final rawCategories = _data['spending_categories'];
+    if (rawCategories is List) {
+      final categories = rawCategories.whereType<Map>();
+      for (final item in categories) {
+        final current = (item['total'] as num?)?.toDouble() ?? 0;
+        final previous =
+            (item['previous_month_total'] as num?)?.toDouble() ?? 0;
+        // Require meaningful history and absolute growth to reduce noise.
+        if (previous < 100 ||
+            current - previous < 100 ||
+            current < previous * 1.5) {
+          continue;
+        }
+        final name = (item['category'] ?? '').toString().trim();
+        final displayName = name.isEmpty || name == 'Uncategorized'
+            ? (isArabic ? 'غير مصنف' : 'Uncategorized')
+            : name;
+        final increase = (current - previous) / previous * 100;
+        alerts.add((
+          icon: Icons.trending_up_rounded,
+          color: const Color(0xFFD97706),
+          title: isArabic
+              ? 'ارتفاع إنفاق $displayName'
+              : '$displayName spending increased',
+          detail: isArabic
+              ? 'ارتفع الإنفاق في هذا التصنيف ${increase.toStringAsFixed(0)}% مقارنة بالشهر السابق.'
+              : 'Spending in this category is up ${increase.toStringAsFixed(0)}% compared with last month.',
+        ));
+        if (alerts.length >= 3) break;
+      }
+    }
+
+    if (alerts.isEmpty && budget != null && limit > 0 && spent < limit) {
+      alerts.add((
+        icon: Icons.check_circle_outline_rounded,
+        color: const Color(0xFF059669),
+        title: isArabic ? 'لا توجد تنبيهات مهمة' : 'No important alerts',
+        detail: isArabic
+            ? 'إنفاقك الحالي ضمن الميزانية، ولم نرصد ارتفاعات كبيرة في التصنيفات التي تتوفر لها بيانات مقارنة.'
+            : 'You are within budget, with no major increases in categories that have comparison data.',
+      ));
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.035),
+            blurRadius: 20,
+            offset: const Offset(0, 7),
           ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.notifications_active_outlined,
+                  color: Color(0xFF6366F1),
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isArabic ? 'التنبيهات الذكية' : 'Smart Alerts',
+                  style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              if (alerts.isNotEmpty &&
+                  !(alerts.length == 1 &&
+                      alerts.first.icon == Icons.check_circle_outline_rounded))
+                Text(
+                  '${alerts.length}',
+                  style: const TextStyle(
+                    color: Color(0xFF6366F1),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (alerts.isEmpty)
+            Text(
+              isArabic
+                  ? 'لا تتوفر بيانات كافية لإصدار تنبيهات مالية حاليًا.'
+                  : 'Not enough data for financial alerts yet.',
+              style: TextStyle(color: textSecondary, fontSize: 12.5),
+            )
+          else
+            ...alerts
+                .take(3)
+                .map(
+                  (alert) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: alert.color.withValues(
+                          alpha: isDark ? 0.12 : 0.06,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(alert.icon, color: alert.color, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  alert.title,
+                                  style: TextStyle(
+                                    color: textPrimary,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  alert.detail,
+                                  style: TextStyle(
+                                    color: textSecondary,
+                                    height: 1.45,
+                                    fontSize: 11.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
         ],
       ),
     );
@@ -398,224 +1226,294 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     Color textSecondary,
     bool isArabic,
   ) {
+    const accent = Color(0xFF6366F1);
+    final headline = _aiAdviceData?['headline']?.toString().trim() ?? '';
+    final analysis = _aiAdviceData?['analysis']?.toString().trim() ?? '';
+    final tips = (_aiAdviceData?['tips'] is List)
+        ? List<dynamic>.from(
+            _aiAdviceData!['tips'] as List,
+          ).map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList()
+        : <String>[];
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: const Color(0xFF6366F1).withValues(alpha: isDark ? 0.35 : 0.2),
-          width: 1.5,
-        ),
+        border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
-            color: const Color(
-              0xFF6366F1,
-            ).withValues(alpha: isDark ? 0.12 : 0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
+            color: Colors.black.withValues(alpha: isDark ? 0.12 : 0.035),
+            blurRadius: 22,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(9),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.auto_awesome_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF4F46E5), Color(0xFF8B5CF6)],
                   ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        isArabic
-                            ? 'المستشار المالي الذكي'
-                            : 'AI Financial Advisor',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                          color: textPrimary,
-                        ),
-                      ),
-                      Text(
-                        isArabic
-                            ? 'تحليل وتوصيات مخصصة عبر Gemini AI'
-                            : 'Smart insights powered by Gemini AI',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: textSecondary,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              if (_isLoadingAiAdvice)
-                const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.2,
-                    color: Color(0xFF6366F1),
-                  ),
-                )
-              else
-                IconButton(
-                  tooltip: isArabic
-                      ? 'إعادة التحليل الآن'
-                      : 'Regenerate Analysis',
-                  style: IconButton.styleFrom(
-                    backgroundColor: const Color(
-                      0xFF6366F1,
-                    ).withValues(alpha: 0.1),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  icon: const Icon(
-                    Icons.refresh_rounded,
-                    size: 18,
-                    color: Color(0xFF6366F1),
-                  ),
-                  onPressed: () => _fetchAiAdvice(),
+                  borderRadius: BorderRadius.circular(14),
                 ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isArabic
+                          ? 'المستشار المالي الذكي'
+                          : 'AI Financial Advisor',
+                      maxLines: 2,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        height: 1.3,
+                        color: textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      isArabic
+                          ? 'رؤى وتوصيات مدعومة بالذكاء الاصطناعي'
+                          : 'AI-powered spending insights',
+                      maxLines: 2,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        height: 1.35,
+                        color: textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: IconButton(
+                  tooltip: isArabic ? 'تحديث التحليل' : 'Refresh insights',
+                  onPressed: _isLoadingAiAdvice ? null : _fetchAiAdvice,
+                  style: IconButton.styleFrom(
+                    backgroundColor: accent.withValues(alpha: 0.09),
+                    disabledBackgroundColor: accent.withValues(alpha: 0.05),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+                  ),
+                  icon: _isLoadingAiAdvice
+                      ? const SizedBox(
+                          width: 19,
+                          height: 19,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: accent,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.refresh_rounded,
+                          color: accent,
+                          size: 22,
+                        ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 18),
-          if (_isLoadingAiAdvice)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+          if (_isLoadingAiAdvice) ...[
+            const SizedBox(height: 16),
+            LinearProgressIndicator(
+              minHeight: 3,
+              borderRadius: BorderRadius.circular(8),
+              backgroundColor: accent.withValues(alpha: 0.10),
+              color: accent,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              isArabic
+                  ? 'جارٍ تحديث التحليل المالي…'
+                  : 'Updating financial insights…',
+              style: TextStyle(fontSize: 12, color: textSecondary),
+            ),
+          ],
+          if (_aiAdviceError != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Row(
                 children: [
                   const Icon(
-                    Icons.hourglass_top_rounded,
-                    size: 18,
-                    color: Color(0xFF6366F1),
+                    Icons.error_outline_rounded,
+                    color: Color(0xFFDC2626),
+                    size: 20,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      isArabic
-                          ? 'جاري استخراج وتحليل نمط الصرف وتقديم التوصيات...'
-                          : 'Analyzing spending patterns and generating personalized advice...',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: textSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      _aiAdviceError!,
+                      style: TextStyle(color: textPrimary, fontSize: 12.5),
                     ),
                   ),
                 ],
               ),
-            )
-          else if (_aiAdviceData != null) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(
-                  0xFF6366F1,
-                ).withValues(alpha: isDark ? 0.15 : 0.08),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                _aiAdviceData!['headline']?.toString() ??
-                    (isArabic ? 'نظرة عامة على نفقاتك' : 'Spending Overview'),
-                style: const TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF6366F1),
+            ),
+          ],
+          if (headline.isNotEmpty ||
+              analysis.isNotEmpty ||
+              tips.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            if (headline.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: isDark ? 0.16 : 0.07),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  headline,
+                  style: TextStyle(
+                    color: isDark
+                        ? const Color(0xFFC7D2FE)
+                        : const Color(0xFF4338CA),
+                    fontSize: 14,
+                    height: 1.55,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              _aiAdviceData!['analysis']?.toString() ?? '',
-              textAlign: TextAlign.start,
-              style: TextStyle(
-                fontSize: 13.5,
-                color: textPrimary.withValues(alpha: 0.95),
-                height: 1.6,
-                fontWeight: FontWeight.w500,
+              const SizedBox(height: 8),
+            ],
+            if (analysis.isNotEmpty)
+              Text(
+                analysis,
+                maxLines: _aiExpanded ? null : 2,
+                overflow: _aiExpanded ? null : TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: textPrimary,
+                  fontSize: 13,
+                  height: 1.55,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
-            ),
-            if (_aiAdviceData!['tips'] is List &&
-                (_aiAdviceData!['tips'] as List).isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Divider(height: 1, color: borderColor),
+            if (_aiExpanded && tips.isNotEmpty) ...[
               const SizedBox(height: 14),
-              ...(_aiAdviceData!['tips'] as List).map((tip) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
+              Divider(height: 1, color: borderColor),
+              const SizedBox(height: 18),
+              Text(
+                isArabic ? 'توصيات قابلة للتنفيذ' : 'Recommended next steps',
+                style: TextStyle(
+                  color: textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...tips.asMap().entries.map(
+                (entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        margin: const EdgeInsets.only(top: 3),
-                        padding: const EdgeInsets.all(4),
+                        width: 28,
+                        height: 28,
+                        alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: const Color(
                             0xFF10B981,
-                          ).withValues(alpha: 0.12),
-                          shape: BoxShape.circle,
+                          ).withValues(alpha: 0.11),
+                          borderRadius: BorderRadius.circular(9),
                         ),
                         child: const Icon(
                           Icons.check_rounded,
-                          color: Color(0xFF10B981),
-                          size: 13,
+                          color: Color(0xFF059669),
+                          size: 17,
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: Text(
-                          tip.toString(),
-                          textAlign: TextAlign.start,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: textSecondary,
-                            fontWeight: FontWeight.w600,
-                            height: 1.45,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            entry.value,
+                            style: TextStyle(
+                              color: textSecondary,
+                              fontSize: 13,
+                              height: 1.7,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                );
-              }),
+                ),
+              ),
             ],
-          ] else
+            if (analysis.isNotEmpty || tips.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton.icon(
+                  onPressed: () => setState(() => _aiExpanded = !_aiExpanded),
+                  icon: Icon(
+                    _aiExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 19,
+                  ),
+                  label: Text(
+                    _aiExpanded
+                        ? (isArabic ? 'عرض أقل' : 'Show less')
+                        : (isArabic
+                              ? 'عرض التحليل والتوصيات بالكامل'
+                              : 'View full analysis & recommendations'),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: accent,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 5,
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ] else if (!_isLoadingAiAdvice && _aiAdviceError == null) ...[
+            const SizedBox(height: 18),
             Text(
               isArabic
-                  ? 'أضف مزيداً من الفواتير لتوليد استشارات مالية مخصصة لمساعدتك في التوفير.'
-                  : 'Add more receipts to generate smart insights and personalized budget advice.',
-              style: TextStyle(fontSize: 13, color: textSecondary),
+                  ? 'أضف فواتيرك للحصول على تحليل مالي وتوصيات مخصصة.'
+                  : 'Add receipts to unlock personalized financial insights.',
+              style: TextStyle(color: textSecondary, fontSize: 13, height: 1.6),
             ),
+          ],
         ],
       ),
     );
@@ -628,108 +1526,157 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     Color textSecondary,
     bool isArabic,
   ) {
-    final dailyAvg = (_data['daily_average'] ?? 0.0) as num;
+    final dailyAvg = (_data['daily_average'] as num?) ?? 0;
     final totalReceipts =
-        (_data['total_receipts_count'] ?? _data['total_count'] ?? 0) as num;
-    final highestExpense = (_data['highest_expense_amount'] ?? 0.0) as num;
+        (_data['total_receipts_count'] as num?) ??
+        (_data['total_count'] as num?) ??
+        0;
+    final highest = (_data['highest_expense_amount'] as num?) ?? 0;
     final currency = (_data['currency'] ?? 'TRY').toString();
-
-    return Row(
-      children: [
-        Expanded(
-          child: _buildMetricTile(
-            title: isArabic ? 'المعدل اليومي' : 'Daily Average',
-            value: '${dailyAvg.toStringAsFixed(1)} $currency',
-            icon: Icons.calendar_today_rounded,
-            iconColor: const Color(0xFF0EA5E9),
-            cardBg: cardBg,
-            borderColor: borderColor,
-            textPrimary: textPrimary,
-            textSecondary: textSecondary,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Always keep the three metrics in one row on phones.
+        final isCompact = constraints.maxWidth < 500;
+        final gap = isCompact ? 7.0 : 12.0;
+        final width = (constraints.maxWidth - gap * 2) / 3;
+        final metrics = [
+          (
+            isArabic ? 'المعدل اليومي' : 'Daily average',
+            NumberFormat('#,##0.#').format(dailyAvg),
+            Icons.calendar_today_rounded,
+            const Color(0xFF0284C7),
+            true,
           ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: _buildMetricTile(
-            title: isArabic ? 'عدد الفواتير' : 'Total Receipts',
-            value: isArabic ? '$totalReceipts فاتورة' : '$totalReceipts Bills',
-            icon: Icons.receipt_long_rounded,
-            iconColor: const Color(0xFF10B981),
-            cardBg: cardBg,
-            borderColor: borderColor,
-            textPrimary: textPrimary,
-            textSecondary: textSecondary,
+          (
+            isArabic ? 'عدد الفواتير' : 'Receipts',
+            NumberFormat.decimalPattern().format(totalReceipts),
+            Icons.receipt_long_rounded,
+            const Color(0xFF059669),
+            false,
           ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: _buildMetricTile(
-            title: isArabic ? 'أعلى فاتورة' : 'Highest Bill',
-            value: '${highestExpense.toStringAsFixed(0)} $currency',
-            icon: Icons.star_rounded,
-            iconColor: const Color(0xFFF59E0B),
-            cardBg: cardBg,
-            borderColor: borderColor,
-            textPrimary: textPrimary,
-            textSecondary: textSecondary,
+          (
+            isArabic ? 'أعلى فاتورة' : 'Highest bill',
+            NumberFormat('#,##0').format(highest),
+            Icons.star_outline_rounded,
+            const Color(0xFFD97706),
+            true,
           ),
-        ),
-      ],
+        ];
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < metrics.length; i++) ...[
+              if (i > 0) SizedBox(width: gap),
+              SizedBox(
+                width: width,
+                child: _buildMetricTile(
+                  title: metrics[i].$1,
+                  value: metrics[i].$2,
+                  currency: metrics[i].$5 ? currency : null,
+                  icon: metrics[i].$3,
+                  iconColor: metrics[i].$4,
+                  cardBg: cardBg,
+                  borderColor: borderColor,
+                  textPrimary: textPrimary,
+                  textSecondary: textSecondary,
+                  compact: isCompact,
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 
   Widget _buildMetricTile({
     required String title,
     required String value,
+    required String? currency,
     required IconData icon,
     required Color iconColor,
     required Color cardBg,
     required Color borderColor,
     required Color textPrimary,
     required Color textSecondary,
+    required bool compact,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      constraints: const BoxConstraints(minHeight: 116),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 9 : 16, vertical: 12),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(17),
         border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: iconColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
+              color: iconColor.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(9),
             ),
-            child: Icon(icon, color: iconColor, size: 20),
+            child: Icon(icon, color: iconColor, size: 17),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 9),
           Text(
             title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: textSecondary,
-              fontSize: 12,
+              fontSize: compact ? 10 : 12,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 5),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: TextStyle(
-                color: textPrimary,
-                fontSize: 16.5,
-                fontWeight: FontWeight.w900,
+            alignment: AlignmentDirectional.centerStart,
+            child: Directionality(
+              textDirection: ui.TextDirection.ltr,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    value,
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontSize: compact ? 17 : 20,
+                      fontWeight: FontWeight.w900,
+                      fontFeatures: const [ui.FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  if (currency != null) ...[
+                    const SizedBox(width: 3),
+                    Text(
+                      currency,
+                      style: TextStyle(
+                        color: textSecondary,
+                        fontSize: compact ? 9 : 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _monthLabel(String value, bool isArabic) {
+    try {
+      return DateFormat.MMM(
+        isArabic ? 'ar' : 'en',
+      ).format(DateTime.parse('$value-01'));
+    } catch (_) {
+      return value;
+    }
   }
 
   Widget _buildMonthlyTrendChart(
@@ -753,7 +1700,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     maxY = (maxY * 1.25).ceilToDouble();
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(24),
@@ -787,10 +1734,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 26),
+          const SizedBox(height: 14),
           trendData.isEmpty
               ? Container(
-                  height: 180,
+                  height: 120,
                   alignment: Alignment.center,
                   child: Text(
                     isArabic
@@ -800,7 +1747,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   ),
                 )
               : SizedBox(
-                  height: 220,
+                  height: 170,
                   child: Directionality(
                     textDirection: ui.TextDirection.ltr,
                     child: BarChart(
@@ -815,7 +1762,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                               final month =
                                   trendData[group.x.toInt()]['month'] ?? '';
                               return BarTooltipItem(
-                                '$month\n${rod.toY.toStringAsFixed(1)} TRY',
+                                '${_monthLabel(month.toString(), isArabic)}\n${NumberFormat('#,##0.##').format(rod.toY)} ${_data['currency'] ?? 'TRY'}',
                                 const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
@@ -836,7 +1783,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           leftTitles: AxisTitles(
                             sideTitles: SideTitles(
                               showTitles: true,
-                              reservedSize: 44,
+                              reservedSize:
+                                  !kIsWeb &&
+                                      MediaQuery.sizeOf(context).width < 600
+                                  ? 52
+                                  : 44,
                               getTitlesWidget: (val, meta) => Text(
                                 NumberFormat.compact().format(val),
                                 style: TextStyle(
@@ -857,9 +1808,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                   return Padding(
                                     padding: const EdgeInsets.only(top: 8.0),
                                     child: Text(
-                                      label.length > 7
-                                          ? label.substring(5)
-                                          : label,
+                                      _monthLabel(label, isArabic),
                                       style: TextStyle(
                                         color: textSecondary,
                                         fontSize: 11,
@@ -898,7 +1847,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                   begin: Alignment.bottomCenter,
                                   end: Alignment.topCenter,
                                 ),
-                                width: 22,
+                                width: trendData.length <= 3 ? 26 : 18,
                                 borderRadius: const BorderRadius.vertical(
                                   top: Radius.circular(8),
                                 ),
@@ -928,7 +1877,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         .toList();
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(24),
@@ -962,7 +1911,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 12),
           merchants.isEmpty
               ? Container(
                   height: 90,
@@ -979,7 +1928,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: min(merchants.length, 5),
                   separatorBuilder: (_, _) =>
-                      Divider(height: 20, color: borderColor),
+                      Divider(height: 14, color: borderColor),
                   itemBuilder: (ctx, i) {
                     final item = merchants[i];
                     final name =
@@ -1015,7 +1964,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                             children: [
                               Text(
                                 name,
-                                maxLines: 1,
+                                maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: textPrimary,
@@ -1023,7 +1972,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                   fontSize: 14,
                                 ),
                               ),
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${NumberFormat('#,##0.##').format(total)} ${_data['currency'] ?? 'TRY'}',
+                                style: TextStyle(
+                                  color: textPrimary,
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
                               Text(
                                 isArabic
                                     ? '$count عملية دفع'
@@ -1034,14 +1992,6 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                 ),
                               ),
                             ],
-                          ),
-                        ),
-                        Text(
-                          '${total.toStringAsFixed(1)} TRY',
-                          style: TextStyle(
-                            color: textPrimary,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 14.5,
                           ),
                         ),
                       ],
