@@ -52,3 +52,8 @@ app.*.map.json
 *.keystore
 **/android/key.properties
 **/android/local.properties
+# local backups and archives
+*.zip
+branding_backup_*/
+web_release_backup/
+_review_*/
