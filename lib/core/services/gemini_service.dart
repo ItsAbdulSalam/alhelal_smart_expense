@@ -14,6 +14,10 @@ class GeminiReceiptService {
     final response = await ApiClient.dio.post(
       '/expenses/analyze-receipt',
       data: formData,
+      options: Options(
+        sendTimeout: ApiClient.aiSendTimeout,
+        receiveTimeout: ApiClient.aiReceiveTimeout,
+      ),
     );
 
     if (response.statusCode == 200 && response.data['status'] == true) {

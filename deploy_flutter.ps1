@@ -19,7 +19,13 @@ if (Test-Path -LiteralPath $destination) {
 New-Item -ItemType Directory -Path $destination | Out-Null
 Copy-Item -Path (Join-Path $source '*') -Destination $destination -Recurse -Force
 
+# Safety net: a secrets file must never be published.
+$leaked = Get-ChildItem -LiteralPath $destination -Recurse -Force -Filter '.env' -ErrorAction SilentlyContinue
+if ($leaked) {
+    throw "A .env file was found inside web_release ($($leaked[0].FullName)). Deployment cancelled."
+}
+
 Write-Host '3/3 Deploying to Vercel production...' -ForegroundColor Cyan
-vercel --prod
+vercel --prod --scope alhelal
 if ($LASTEXITCODE -ne 0) { throw 'Vercel deployment failed.' }
 Write-Host 'Deployment finished.' -ForegroundColor Green

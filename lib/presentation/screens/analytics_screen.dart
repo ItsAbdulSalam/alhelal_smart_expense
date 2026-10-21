@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:intl/intl.dart';
 import '../../core/services/api_client.dart';
 
@@ -175,6 +176,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         '/analytics/ai-advice',
 
         queryParameters: {'locale': locale},
+        options: Options(receiveTimeout: ApiClient.aiReceiveTimeout),
       );
       debugPrint(
         'AI ADVISOR CACHED: ${res.data is Map ? res.data['cached'] : 'unknown'}',

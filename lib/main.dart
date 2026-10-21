@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,18 +16,21 @@ import 'presentation/screens/dashboard_loader.dart';
 import 'presentation/widgets/connectivity_banner.dart';
 import 'presentation/screens/session_retry_screen.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. قراءة متغيرات البيئة
-  try {
-    await dotenv.load(fileName: '.env');
-  } catch (_) {
-    debugPrint('ℹ️ .env bypass');
-  }
-
-  // 2. تهيئة ApiClient الخاص بسيرفر Laravel
+  // 1. تهيئة ApiClient الخاص بسيرفر Laravel
   ApiClient.init();
+
+  // عند انتهاء صلاحية الجلسة (401) نعيد المستخدم إلى شاشة الدخول.
+  ApiClient.onUnauthorized = () {
+    navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+      (route) => false,
+    );
+  };
 
   // 3. قراءة تفضيلات اللغة والمظهر
   final prefs = await SharedPreferences.getInstance();
@@ -127,6 +129,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Alhelal Smart Expense',
       debugShowCheckedModeBanner: false,
       locale: _locale,

@@ -12,3 +12,12 @@ coverage
 .idea
 .vscode
 *.log
+
+# secrets and local backups must never be uploaded
+.env
+**/.env
+*.zip
+branding_backup_*
+web_release_backup
+_review_*
+_backups

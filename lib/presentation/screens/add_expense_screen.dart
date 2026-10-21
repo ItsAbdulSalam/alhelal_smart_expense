@@ -61,7 +61,9 @@ class _AddExpenseScreenState extends State<AddExpenseScreen> {
     try {
       final XFile? image = await _picker.pickImage(
         source: effectiveSource,
-        imageQuality: 85,
+        imageQuality: 80,
+        maxWidth: 1600,
+        maxHeight: 1600,
       );
 
       if (image == null) return;

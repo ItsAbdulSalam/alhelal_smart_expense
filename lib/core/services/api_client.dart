@@ -10,12 +10,23 @@ class ApiClient {
 
   static late final Dio dio;
 
+  /// Timeouts for slow AI endpoints (receipt scan, financial advisor).
+  /// The server may wait for Gemini for up to ~70 seconds.
+  static const Duration aiReceiveTimeout = Duration(seconds: 120);
+  static const Duration aiSendTimeout = Duration(seconds: 60);
+
+  /// Called once when the server rejects the saved token (HTTP 401),
+  /// for example after it expired. The app uses it to return to login.
+  static VoidCallback? onUnauthorized;
+  static bool _handlingUnauthorized = false;
+
   static void init() {
     dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 30),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -39,7 +50,20 @@ class ApiClient {
 
           return handler.next(options);
         },
-        onError: (DioException error, handler) {
+        onError: (DioException error, handler) async {
+          if (error.response?.statusCode == 401 &&
+              error.requestOptions.headers['Authorization'] != null &&
+              !_handlingUnauthorized) {
+            _handlingUnauthorized = true;
+            try {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.remove('auth_token');
+              onUnauthorized?.call();
+            } finally {
+              _handlingUnauthorized = false;
+            }
+          }
+
           if (kDebugMode) {
             debugPrint(
               'API Error: ${error.response?.statusCode ?? 'No response'}',

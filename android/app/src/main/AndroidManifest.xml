@@ -1,19 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- صلاحيات الإنترنت والاتصال -->
+    <!-- الإنترنت والكاميرا فقط. image_picker يستخدم منتقي النظام، فلا حاجة لصلاحيات التخزين. -->
     <uses-permission android:name="android.permission.INTERNET" />
-
-    <!-- الصلاحيات الخاصة بالماسح الضوئي والتقاط وفحص الإيصالات -->
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+
+    <!-- الكاميرا غير إلزامية حتى لا يُستبعد التطبيق من الأجهزة التي بلا كاميرا. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:label="Alhelal Smart Expense"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:enableOnBackInvokedCallback="true">
-        
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -32,17 +32,16 @@
             </intent-filter>
         </activity>
 
-        <!-- تفعيل معيار Flutter Embedding v2 الصريح لمنع أخطاء البناء -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- تعطيل Impeller لضمان ظهور الرسوم وسلاسة العرض على المحاكي -->
+        <!-- معطّل سابقًا لأجل المحاكي. يمكن إزالته لاحقًا بعد اختبار جهاز حقيقي. -->
         <meta-data
             android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false" />
     </application>
-    
+
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
