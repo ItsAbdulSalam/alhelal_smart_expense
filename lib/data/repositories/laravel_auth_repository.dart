@@ -334,4 +334,27 @@ class LaravelAuthRepository {
       }
     }
   }
+
+  // ============================================================
+  // Account Deletion
+  // ============================================================
+
+  /// Permanently deletes the account on the server (password confirmed),
+  /// then clears the local session.
+  Future<void> deleteAccount({required String password}) async {
+    try {
+      await _dio.delete<dynamic>('/user', data: {'password': password});
+    } on DioException {
+      if (kDebugMode) {
+        debugPrint('Account deletion request failed');
+      }
+      rethrow;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+    await prefs.remove('user_name');
+    await prefs.remove('user_email');
+    await prefs.remove('user_avatar_url');
+  }
 }
